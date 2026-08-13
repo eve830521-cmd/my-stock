@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Stock Dashboard V3.0 (Dark Mode)</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
+</head>
+<body class="dark-theme">
+    <!-- 로딩 오버레이 -->
+    <div id="loadingOverlay" class="loading-overlay" style="display:none;">
+        <div class="spinner"></div>
+        <p>DART API에서 재무제표를 수집 및 가공 중입니다...<br><small>최대 30초 정도 소요될 수 있습니다. 잠시만 기다려주세요.</small></p>
+    </div>
+
+    <!-- 최상단 컨트롤 바 -->
+    <header class="top-bar">
+        <div class="top-left">
+            <div class="list-dropdown">
+                <button id="listBtn" class="btn-dark">리스트 ▾</button>
+                <ul id="companyList" class="dropdown-content"></ul>
+            </div>
+            
+            <div class="search-box">
+                <input type="text" id="corpInput" placeholder="기업명(예: 삼성전자)">
+                <input type="number" id="startYear" value="2015" class="year-input">
+                <select class="q-select"><option>1Q</option></select>
+                <span class="tilde">~</span>
+                <input type="number" id="endYear" value="2026" class="year-input">
+                <select class="q-select"><option>4Q</option></select>
+                
+                <button id="searchBtn" class="btn-primary">조회 및 최신화</button>
+            </div>
+        </div>
+        
+        <div class="top-right">
+            <span id="currentCorpName" class="corp-name-display">기업을 검색하세요</span>
+            
+            <div class="toggle-container">
+                <span class="toggle-label active" id="label-ttm">연환산(TTM)</span>
+                <label class="switch">
+                    <input type="checkbox" id="dataModeToggle">
+                    <span class="slider round"></span>
+                </label>
+                <span class="toggle-label" id="label-annual">순수연간(Annual)</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- 하위 탭 메뉴 -->
+    <nav class="sub-nav">
+        <button class="tablink active" onclick="openTab(event, 'tab-profit')">수익성</button>
+        <button class="tablink" onclick="openTab(event, 'tab-safety')">안전성</button>
+        <button class="tablink" onclick="openTab(event, 'tab-cashflow')">현금흐름</button>
+        <button class="tablink" onclick="openTab(event, 'tab-efficiency')">효율성</button>
+        <button class="tablink" onclick="openTab(event, 'tab-valuation')">밸류에이션</button>
+        <button class="tablink dcf-tab" onclick="openTab(event, 'tab-dcf')">주주이익DCF</button>
+    </nav>
+
+    <!-- 탭 1: 수익성 (차트 1,2,3,4) -->
+    <main id="tab-profit" class="tabcontent" style="display:block;">
+        <div class="chart-grid">
+            <div class="chart-box" id="chart1"></div>
+            <div class="chart-box" id="chart2"></div>
+            <div class="chart-box" id="chart3"></div>
+            <div class="chart-box" id="chart4"></div>
+        </div>
+    </main>
+
+    <!-- 탭 2: 안전성 (차트 5) -->
+    <main id="tab-safety" class="tabcontent" style="display:none;">
+        <div class="chart-grid">
+            <div class="chart-box" id="chart5"></div>
+        </div>
+    </main>
+
+    <!-- 탭 3: 현금흐름 (차트 6,7) -->
+    <main id="tab-cashflow" class="tabcontent" style="display:none;">
+        <div class="chart-grid">
+            <div class="chart-box" id="chart6"></div>
+            <div class="chart-box" id="chart7"></div>
+        </div>
+    </main>
+
+    <!-- 탭 4: 효율성 (차트 8,9) -->
+    <main id="tab-efficiency" class="tabcontent" style="display:none;">
+        <div class="chart-grid">
+            <div class="chart-box" id="chart8"></div>
+            <div class="chart-box" id="chart9"></div>
+        </div>
+    </main>
+
+    <!-- 탭 5: 밸류에이션 (차트 10,11) -->
+    <main id="tab-valuation" class="tabcontent" style="display:none;">
+        <div class="chart-grid">
+            <div class="chart-box" id="chart10"></div>
+            <div class="chart-box" id="chart11"></div>
+        </div>
+    </main>
+
+    <!-- 탭 6: 주주이익DCF (기존 구조 유지하되 다크모드 대응) -->
+    <main id="tab-dcf" class="tabcontent" style="display:none;">
+        <div class="dcf-container">
+            <!-- DCF 영역 (Phase 3에서 자바스크립트로 주입됨) -->
+            <div id="dcfFormArea">
+                <p style="color:#94a3b8; text-align:center; padding: 50px;">기업을 검색한 후 데이터를 불러오면 활성화됩니다.</p>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top:30px;">
+                <h2 style="color:white;">연도별 요약 표</h2>
+                <button id="exportDcfBtn" class="btn-primary" style="display:none;">DCF 엑셀 다운로드</button>
+            </div>
+            
+            <div class="table-container">
+                <table id="annualTable" class="dark-table">
+                    <thead>
+                        <tr>
+                            <th>연도</th>
+                            <th>매출액</th>
+                            <th>영업이익</th>
+                            <th>영업이익률</th>
+                            <th>세후영업이익</th>
+                            <th>당기순이익</th>
+                            <th>당기순이익률</th>
+                            <th>지배주주ROE</th>
+                            <th>ROIC</th>
+                            <th>배당금</th>
+                            <th>영업활동현금흐름</th>
+                            <th>CAPEX</th>
+                            <th>FCF</th>
+                            <th>감가상각비</th>
+                            <th>법인세율</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <script src="/static/chart_render.js"></script>
+    <script src="/static/dcf_valuation.js"></script>
+    <script>
+        function openTab(evt, tabName) {
+            var i, tabcontent, tablinks;
+            tabcontent = document.getElementsByClassName("tabcontent");
+            for (i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
+            }
+            tablinks = document.getElementsByClassName("tablink");
+            for (i = 0; i < tablinks.length; i++) {
+                tablinks[i].className = tablinks[i].className.replace(" active", "");
+            }
+            document.getElementById(tabName).style.display = "block";
+            evt.currentTarget.className += " active";
+            
+            // 탭이 보이게 된 직후 ECharts 크기 재조정 이벤트를 강제 발생시켜 찌그러짐 해결
+            window.dispatchEvent(new Event('resize'));
+        }
+    </script>
+</body>
+</html>

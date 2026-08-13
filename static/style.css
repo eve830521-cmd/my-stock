@@ -1,0 +1,361 @@
+* {
+    box-sizing: border-box;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+body.dark-theme {
+    margin: 0;
+    padding: 0;
+    background-color: #0f172a; /* 아주 어두운 네이비 바탕 */
+    color: #f8fafc;
+}
+
+/* 최상단 컨트롤 바 */
+.top-bar {
+    background-color: #1e293b;
+    padding: 12px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #334155;
+}
+
+.top-left, .top-right {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+/* 리스트 버튼 및 드롭다운 */
+.list-dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.btn-dark {
+    background-color: #334155;
+    color: #f8fafc;
+    border: 1px solid #475569;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.btn-dark:hover {
+    background-color: #475569;
+}
+
+.dropdown-content {
+    display: none;
+    position: absolute;
+    left: 0;
+    background-color: #1e293b;
+    min-width: 160px;
+    box-shadow: 0px 8px 16px rgba(0,0,0,0.5);
+    z-index: 1000;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    border-radius: 6px;
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #334155;
+}
+
+.dropdown-content li {
+    color: #e2e8f0;
+    padding: 12px 16px;
+    cursor: pointer;
+    border-bottom: 1px solid #334155;
+}
+
+.dropdown-content li:hover {
+    background-color: #334155;
+}
+
+.list-dropdown:hover .dropdown-content {
+    display: block;
+}
+
+/* 검색 바 폼 */
+.search-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background-color: #0f172a;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid #334155;
+}
+
+.search-box input[type="text"] {
+    background: transparent;
+    border: none;
+    color: white;
+    width: 150px;
+    outline: none;
+}
+
+.year-input {
+    background-color: #1e293b;
+    border: 1px solid #334155;
+    color: white;
+    padding: 4px;
+    border-radius: 4px;
+    width: 60px;
+    text-align: center;
+}
+
+.q-select {
+    background-color: #1e293b;
+    border: 1px solid #334155;
+    color: white;
+    padding: 4px;
+    border-radius: 4px;
+}
+
+.tilde {
+    color: #94a3b8;
+}
+
+.btn-primary {
+    background-color: #3b82f6;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.btn-primary:hover {
+    background-color: #2563eb;
+}
+
+/* 우측 기업명 표기 */
+.corp-name-display {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-right: 20px;
+}
+
+/* 토글 스위치 (TTM / Annual) */
+.toggle-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.toggle-label {
+    font-size: 0.9rem;
+    color: #64748b;
+    font-weight: 600;
+}
+
+.toggle-label.active {
+    color: #f8fafc;
+}
+
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+}
+
+.switch input { 
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #3b82f6;
+    transition: .4s;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+}
+
+input:checked + .slider {
+    background-color: #3b82f6;
+}
+
+input:checked + .slider:before {
+    transform: translateX(20px);
+}
+
+.slider.round {
+    border-radius: 24px;
+}
+
+.slider.round:before {
+    border-radius: 50%;
+}
+
+/* 하위 탭 메뉴 */
+.sub-nav {
+    display: flex;
+    background-color: #1e293b;
+    padding: 0 24px;
+    border-bottom: 1px solid #334155;
+}
+
+.tablink {
+    background-color: transparent;
+    color: #94a3b8;
+    border: none;
+    padding: 12px 20px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 600;
+    border-bottom: 3px solid transparent;
+}
+
+.tablink:hover {
+    color: #cbd5e1;
+}
+
+.tablink.active {
+    color: #3b82f6;
+    border-bottom: 3px solid #3b82f6;
+}
+
+.tablink.dcf-tab {
+    color: #f59e0b; /* 주주이익DCF는 특별한 색상 */
+}
+
+.tablink.dcf-tab.active {
+    border-bottom: 3px solid #f59e0b;
+}
+
+/* 차트 그리드 및 박스 */
+.tabcontent {
+    padding: 24px;
+}
+
+.chart-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+}
+
+.chart-box {
+    background-color: #1e293b;
+    border-radius: 12px;
+    border: 1px solid #334155;
+    height: 75vh;
+    width: 100%;
+    padding: 20px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+}
+
+/* DCF 화면 스타일 (다크모드 대응) */
+.dcf-container {
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* 엑셀형 테이블 스타일 */
+.excel-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 30px;
+    background-color: #1e293b;
+    color: #e2e8f0;
+    font-size: 0.95rem;
+}
+.excel-table th, .excel-table td {
+    border: 1px solid #475569;
+    padding: 10px 15px;
+    text-align: right;
+}
+.excel-table th {
+    background-color: #0f172a;
+    color: #94a3b8;
+    text-align: center;
+    font-weight: bold;
+}
+.excel-table td:first-child {
+    text-align: left;
+    background-color: #0f172a;
+    font-weight: bold;
+}
+.excel-input {
+    background-color: #fef08a; /* 노란색 배경 */
+    color: #000;
+    border: 1px solid #eab308;
+    border-radius: 3px;
+    padding: 4px;
+    width: 80px;
+    text-align: right;
+    font-weight: bold;
+}
+.excel-input:focus {
+    outline: 2px solid #3b82f6;
+}
+.calc-value {
+    color: #f8fafc;
+    font-weight: bold;
+}
+
+/* 로딩 오버레이 */
+.loading-overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background-color: rgba(15, 23, 42, 0.85); /* 다크 네이비 투명 */
+    color: white;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+.spinner {
+    border: 6px solid #334155;
+    border-top: 6px solid #3b82f6;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+    margin-bottom: 15px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* 다크모드 전용 테이블 */
+.dark-table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: #1e293b;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.dark-table th, .dark-table td {
+    padding: 12px;
+    text-align: right;
+    border-bottom: 1px solid #334155;
+}
+
+.dark-table th {
+    background-color: #0f172a;
+    color: #94a3b8;
+    text-align: center;
+}
