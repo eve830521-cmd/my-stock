@@ -439,3 +439,164 @@ input:checked + .slider:before {
     margin-left: 10px;
     vertical-align: middle;
 }
+
+/* 밸류에이션 밴드 카드 및 개월 선택 툴바 */
+.band-card {
+    background-color: #1e293b;
+    border-radius: 12px;
+    border: 1px solid #334155;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+}
+
+.band-card .chart-box {
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    height: 75vh;
+}
+
+.band-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px 20px;
+    background-color: #0f172a;
+    border-bottom: 1px solid #334155;
+}
+
+.band-toolbar-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.band-toolbar-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #e2e8f0;
+}
+
+.period-badge {
+    display: inline-flex;
+    align-items: center;
+    background-color: #1e293b;
+    color: #38bdf8;
+    border: 1px solid #0284c7;
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 20px;
+    letter-spacing: 0.3px;
+}
+
+.band-toolbar-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.preset-btn-group {
+    display: flex;
+    gap: 3px;
+    background-color: #1e293b;
+    padding: 3px;
+    border-radius: 6px;
+    border: 1px solid #334155;
+}
+
+.btn-period {
+    background-color: transparent;
+    color: #94a3b8;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-period:hover {
+    background-color: #334155;
+    color: #f8fafc;
+}
+
+.btn-period.active {
+    background-color: #3b82f6;
+    color: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.custom-period-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background-color: #1e293b;
+    padding: 3px 8px;
+    border-radius: 6px;
+    border: 1px solid #334155;
+}
+
+.input-period-months {
+    background-color: #0f172a;
+    border: 1px solid #475569;
+    color: #ffffff;
+    width: 60px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    text-align: right;
+    font-weight: 600;
+    outline: none;
+}
+
+.input-period-months:focus {
+    border-color: #38bdf8;
+}
+
+.unit-label {
+    font-size: 0.82rem;
+    color: #94a3b8;
+    font-weight: 600;
+}
+
+.btn-period-apply {
+    background-color: #3b82f6;
+    color: white;
+    border: none;
+    padding: 5px 12px;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-period-apply:hover {
+    background-color: #2563eb;
+}
+
+.sync-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    color: #cbd5e1;
+    cursor: pointer;
+    user-select: none;
+    margin-left: 4px;
+    background-color: #1e293b;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid #334155;
+}
+
+.sync-checkbox-label input[type="checkbox"] {
+    accent-color: #3b82f6;
+    cursor: pointer;
+}

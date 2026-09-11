@@ -95,8 +95,61 @@
     <!-- 탭 5: 밸류에이션 (차트 10,11) -->
     <main id="tab-valuation" class="tabcontent" style="display:none;">
         <div class="chart-grid">
-            <div class="chart-box" id="chart10"></div>
-            <div class="chart-box" id="chart11"></div>
+            <!-- 10. PER 밴드 카드 -->
+            <div class="band-card">
+                <div class="band-toolbar" id="perBandToolbar">
+                    <div class="band-toolbar-info">
+                        <span class="band-toolbar-title">10. 주가수익비율 (PER) 밴드</span>
+                        <span class="period-badge" id="perPeriodBadge">조회기간: 전체</span>
+                    </div>
+                    <div class="band-toolbar-controls">
+                        <div class="preset-btn-group" id="perPresetBtns">
+                            <button type="button" class="btn-period" onclick="setBandPeriod(9, 6)">6개월</button>
+                            <button type="button" class="btn-period" onclick="setBandPeriod(9, 12)">12개월</button>
+                            <button type="button" class="btn-period" onclick="setBandPeriod(9, 24)">24개월</button>
+                            <button type="button" class="btn-period" onclick="setBandPeriod(9, 36)">36개월</button>
+                            <button type="button" class="btn-period" onclick="setBandPeriod(9, 60)">60개월</button>
+                            <button type="button" class="btn-period active" onclick="setBandPeriod(9, 'all')">전체</button>
+                        </div>
+                        <div class="custom-period-group">
+                            <input type="number" id="perMonthsInput" class="input-period-months" placeholder="개월" min="1" max="120" onkeypress="if(event.key==='Enter') applyCustomMonths(9)">
+                            <span class="unit-label">개월</span>
+                            <button type="button" class="btn-period-apply" onclick="applyCustomMonths(9)">적용</button>
+                        </div>
+                        <label class="sync-checkbox-label">
+                            <input type="checkbox" id="syncBandCheckbox" checked onchange="toggleSyncBands(this.checked)">
+                            <span>PER/PBR 연동</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="chart-box" id="chart10"></div>
+            </div>
+
+            <!-- 11. PBR 밴드 카드 -->
+            <div class="band-card">
+                <div class="band-toolbar" id="pbrBandToolbar">
+                    <div class="band-toolbar-info">
+                        <span class="band-toolbar-title">11. 주가순자산비율 (PBR) 밴드</span>
+                        <span class="period-badge" id="pbrPeriodBadge">조회기간: 전체</span>
+                    </div>
+                    <div class="band-toolbar-controls">
+                        <div class="preset-btn-group" id="pbrPresetBtns">
+                            <button type="button" class="btn-period" onclick="setBandPeriod(10, 6)">6개월</button>
+                            <button type="button" class="btn-period" onclick="setBandPeriod(10, 12)">12개월</button>
+                            <button type="button" class="btn-period" onclick="setBandPeriod(10, 24)">24개월</button>
+                            <button type="button" class="btn-period" onclick="setBandPeriod(10, 36)">36개월</button>
+                            <button type="button" class="btn-period" onclick="setBandPeriod(10, 60)">60개월</button>
+                            <button type="button" class="btn-period active" onclick="setBandPeriod(10, 'all')">전체</button>
+                        </div>
+                        <div class="custom-period-group">
+                            <input type="number" id="pbrMonthsInput" class="input-period-months" placeholder="개월" min="1" max="120" onkeypress="if(event.key==='Enter') applyCustomMonths(10)">
+                            <span class="unit-label">개월</span>
+                            <button type="button" class="btn-period-apply" onclick="applyCustomMonths(10)">적용</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="chart-box" id="chart11"></div>
+            </div>
         </div>
     </main>
 

@@ -80,6 +80,132 @@ document.addEventListener('click', function(e) {
 });
 
 let currentMode = 'TTM'; // 'TTM' or 'Annual'
+let syncBandPeriods = true;
+let currentBandMonths = { 9: 'all', 10: 'all' };
+let isSyncingZoom = false;
+
+function toggleSyncBands(checked) {
+    syncBandPeriods = checked;
+    let syncCb = document.getElementById('syncBandCheckbox');
+    if (syncCb) syncCb.checked = checked;
+    if (syncBandPeriods) {
+        let perMonths = currentBandMonths[9] || 'all';
+        setBandPeriod(10, perMonths, true);
+    }
+}
+
+function setBandPeriod(chartIndex, months, fromSync = false) {
+    let bandData = window.currentBandData;
+    if (!bandData || bandData.length === 0) return;
+    
+    currentBandMonths[chartIndex] = months;
+    
+    let lastItem = bandData[bandData.length - 1];
+    let lastDateStr = lastItem.date || (lastItem.Year ? `${lastItem.Year}-12-31` : null);
+    let endDate = lastDateStr ? new Date(lastDateStr) : new Date();
+    
+    let firstItem = bandData[0];
+    let firstDateStr = firstItem.date || (firstItem.Year ? `${firstItem.Year}-01-01` : null);
+    let startDateAll = firstDateStr ? new Date(firstDateStr) : new Date();
+    let totalMonths = Math.max(1, Math.round((endDate - startDateAll) / (1000 * 60 * 60 * 24 * 30.4375)));
+
+    let startPercent = 0;
+    let endPercent = 100;
+    let startIdx = 0;
+    let endIdx = bandData.length - 1;
+    let isFull = false;
+    let effectiveMonths = totalMonths;
+
+    if (months === 'all' || !months || months <= 0 || parseInt(months) >= totalMonths) {
+        startPercent = 0;
+        endPercent = 100;
+        startIdx = 0;
+        isFull = true;
+        effectiveMonths = totalMonths;
+    } else {
+        let m = parseInt(months);
+        effectiveMonths = m;
+        let targetStartDate = new Date(endDate);
+        targetStartDate.setMonth(targetStartDate.getMonth() - m);
+        
+        startIdx = bandData.findIndex(d => {
+            let cur = new Date(d.date || `${d.Year}-01-01`);
+            return cur >= targetStartDate;
+        });
+        if (startIdx === -1) startIdx = 0;
+        startPercent = (startIdx / Math.max(1, bandData.length - 1)) * 100;
+        endPercent = 100;
+    }
+    
+    let chart = charts[chartIndex];
+    if (chart) {
+        chart.setOption({
+            dataZoom: [
+                { type: 'inside', start: startPercent, end: endPercent },
+                { type: 'slider', start: startPercent, end: endPercent }
+            ]
+        });
+        
+        if (typeof window.updateBandChart === 'function') {
+            window.updateBandChart(chartIndex);
+        }
+    }
+    
+    let actualStart = bandData[startIdx].date || bandData[startIdx].Year;
+    let actualEnd = bandData[endIdx].date || bandData[endIdx].Year;
+    updateBandPeriodUI(chartIndex, effectiveMonths, actualStart, actualEnd, isFull);
+    
+    // 동기화 처리
+    if (syncBandPeriods && !fromSync) {
+        let targetIndex = chartIndex === 9 ? 10 : 9;
+        setBandPeriod(targetIndex, months, true);
+    }
+}
+
+function applyCustomMonths(chartIndex) {
+    let inputId = chartIndex === 9 ? 'perMonthsInput' : 'pbrMonthsInput';
+    let input = document.getElementById(inputId);
+    if (!input || !input.value) return;
+    let val = parseInt(input.value.trim());
+    if (isNaN(val) || val <= 0) {
+        alert("1 이상의 개월 수를 입력해주세요.");
+        return;
+    }
+    setBandPeriod(chartIndex, val);
+}
+
+function updateBandPeriodUI(chartIndex, effectiveMonths, startDateStr, endDateStr, isFull) {
+    let prefix = chartIndex === 9 ? 'per' : 'pbr';
+    let badge = document.getElementById(`${prefix}PeriodBadge`);
+    let input = document.getElementById(`${prefix}MonthsInput`);
+    let presetContainer = document.getElementById(`${prefix}PresetBtns`);
+    
+    if (badge) {
+        if (isFull) {
+            badge.textContent = `조회기간: 전체 ${effectiveMonths}개월 (${startDateStr} ~ ${endDateStr})`;
+        } else {
+            badge.textContent = `조회기간: 최근 ${effectiveMonths}개월 (${startDateStr} ~ ${endDateStr})`;
+        }
+    }
+    
+    if (input) {
+        input.value = isFull ? '' : effectiveMonths;
+    }
+    
+    if (presetContainer) {
+        let buttons = presetContainer.querySelectorAll('.btn-period');
+        buttons.forEach(btn => {
+            let onclickText = btn.getAttribute('onclick') || '';
+            if (isFull && onclickText.includes("'all'")) {
+                btn.classList.add('active');
+            } else if (!isFull && onclickText.includes(`, ${effectiveMonths})`)) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+    }
+}
 
 document.addEventListener("DOMContentLoaded", () => {
     // 11개 차트 초기화 (다크모드 테마 적용)
@@ -362,6 +488,13 @@ function renderCharts(viewData) {
     if (globalChartData && globalChartData.band_data && globalChartData.band_data.length > 0) {
         let useAnnualBand = (currentMode === 'Annual' && globalChartData.annual_band_data && globalChartData.annual_band_data.length > 0);
         let bandData = useAnnualBand ? globalChartData.annual_band_data : globalChartData.band_data;
+        window.currentBandData = bandData;
+
+        // 툴바 표시
+        let perToolbar = document.getElementById('perBandToolbar');
+        let pbrToolbar = document.getElementById('pbrBandToolbar');
+        if (perToolbar) perToolbar.style.display = 'flex';
+        if (pbrToolbar) pbrToolbar.style.display = 'flex';
         
         let bandXAxis = bandData.map(d => d.date || d.Year);
         let currentPrice = viewData.length > 0 && viewData[0]['주가'] ? viewData[0]['주가'].toLocaleString() : '-';
@@ -483,7 +616,7 @@ function renderCharts(viewData) {
             ]
         });
         
-        // --- 동적 줌(Zoom) 시 밴드 재계산 이벤트 연동 ---
+        // --- 동적 줌(Zoom) 시 밴드 재계산 및 기간 표시 연동 ---
         const updateBands = (chartIndex, key, titlePrefix) => {
             let chart = charts[chartIndex];
             setTimeout(() => {
@@ -503,6 +636,22 @@ function renderCharts(viewData) {
                 let sliced = bandData.slice(startIdx, endIdx + 1);
                 let allVals = sliced.map(d => d[key]).filter(v => v > 0);
                 let vals = allVals.slice();
+
+                // UI 기간 배지 및 입력란 동기화
+                let firstDate = new Date(bandData[0].date || `${bandData[0].Year}-01-01`);
+                let lastDate = new Date(bandData[bandData.length - 1].date || `${bandData[bandData.length - 1].Year}-12-31`);
+                let totalMonths = Math.max(1, Math.round((lastDate - firstDate) / (1000 * 60 * 60 * 24 * 30.4375)));
+
+                let sDate = new Date(bandData[startIdx].date || `${bandData[startIdx].Year}-01-01`);
+                let eDate = new Date(bandData[endIdx].date || `${bandData[endIdx].Year}-12-31`);
+                let curMonths = Math.max(1, Math.round((eDate - sDate) / (1000 * 60 * 60 * 24 * 30.4375)));
+                let isFull = (startIdx === 0 && endIdx >= bandData.length - 1);
+                
+                let sStr = bandData[startIdx].date || bandData[startIdx].Year;
+                let eStr = bandData[endIdx].date || bandData[endIdx].Year;
+                
+                updateBandPeriodUI(chartIndex, isFull ? totalMonths : curMonths, sStr, eStr, isFull);
+                currentBandMonths[chartIndex] = isFull ? 'all' : curMonths;
                 
                 if (allVals.length > 0) {
                     vals.sort((a,b) => a - b);
@@ -527,7 +676,31 @@ function renderCharts(viewData) {
                         ]
                     });
                 }
+
+                // 슬라이더 조작 시 PER/PBR 동기화
+                if (syncBandPeriods && !isSyncingZoom) {
+                    let targetIndex = chartIndex === 9 ? 10 : 9;
+                    let targetChart = charts[targetIndex];
+                    if (targetChart && opt.dataZoom && opt.dataZoom[0]) {
+                        isSyncingZoom = true;
+                        targetChart.setOption({
+                            dataZoom: [
+                                { type: 'inside', start: opt.dataZoom[0].start, end: opt.dataZoom[0].end },
+                                { type: 'slider', start: opt.dataZoom[0].start, end: opt.dataZoom[0].end }
+                            ]
+                        });
+                        let targetKey = targetIndex === 9 ? 'PER' : 'PBR';
+                        let targetPrefix = targetIndex === 9 ? '10. 주가수익비율 (PER) 밴드' : '11. 주가순자산비율 (PBR) 밴드';
+                        updateBands(targetIndex, targetKey, targetPrefix);
+                        setTimeout(() => { isSyncingZoom = false; }, 80);
+                    }
+                }
             }, 50);
+        };
+
+        window.updateBandChart = (chartIndex) => {
+            if (chartIndex === 9) updateBands(9, 'PER', '10. 주가수익비율 (PER) 밴드');
+            else if (chartIndex === 10) updateBands(10, 'PBR', '11. 주가순자산비율 (PBR) 밴드');
         };
 
         charts[9].off('dataZoom');
@@ -535,8 +708,22 @@ function renderCharts(viewData) {
         charts[10].off('dataZoom');
         charts[10].on('dataZoom', () => updateBands(10, 'PBR', '11. 주가순자산비율 (PBR) 밴드'));
 
+        // 초기 기간 반영
+        let initialPeriod = currentBandMonths[9] || 'all';
+        setBandPeriod(9, initialPeriod, true);
+        if (!syncBandPeriods && currentBandMonths[10]) {
+            setBandPeriod(10, currentBandMonths[10], true);
+        } else {
+            setBandPeriod(10, initialPeriod, true);
+        }
+
     } else {
         // 과거 캐시 등 밴드 데이터가 없을 경우 Fallback
+        let perToolbar = document.getElementById('perBandToolbar');
+        let pbrToolbar = document.getElementById('pbrBandToolbar');
+        if (perToolbar) perToolbar.style.display = 'none';
+        if (pbrToolbar) pbrToolbar.style.display = 'none';
+
         applyOption(9, '10. 주가수익비율 (PER) 밴드', {
             xAxis: { type: 'category', data: xAxisData },
             yAxis: { type: 'value', name: 'PER(배)', scale: true },
