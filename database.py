@@ -112,8 +112,8 @@ def fetch_dart_api(endpoint, params):
     
     if res.status_code == 200:
         data = res.json()
-        # 000: 성공, 013: 데이터 없음
-        if data.get('status') == '000' or data.get('status') == '013': 
+        # 000: 정상 데이터만 캐싱 (013 등 데이터 없음은 다음 갱신을 위해 캐싱하지 않음)
+        if data.get('status') == '000': 
             c.execute("INSERT OR REPLACE INTO api_cache (endpoint, params, response) VALUES (?, ?, ?)", 
                       (endpoint, params_str, json.dumps(data)))
             conn.commit()
@@ -129,12 +129,10 @@ def get_historical_prices(stock_code, years=10):
     
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT response FROM api_cache WHERE endpoint=? AND params=?", (endpoint, params_str))
-    row = c.fetchone()
     
-    if row:
-        conn.close()
-        return json.loads(row[0])
+    # 주가 데이터는 매일 변하므로, 기존 캐시를 삭제하고 항상 최신 데이터를 수집
+    c.execute("DELETE FROM api_cache WHERE endpoint=? AND params=?", (endpoint, params_str))
+    conn.commit()
         
     # Calculate start date (10 years ago from today)
     end_date = datetime.today()

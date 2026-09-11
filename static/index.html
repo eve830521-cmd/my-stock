@@ -24,7 +24,7 @@
             
             <div class="search-box">
                 <input type="text" id="corpInput" placeholder="기업명(예: 삼성전자)">
-                <input type="number" id="startYear" value="2015" class="year-input">
+                <input type="number" id="startYear" value="2016" class="year-input">
                 <select class="q-select"><option>1Q</option></select>
                 <span class="tilde">~</span>
                 <input type="number" id="endYear" value="2026" class="year-input">
@@ -36,6 +36,7 @@
         
         <div class="top-right">
             <span id="currentCorpName" class="corp-name-display">기업을 검색하세요</span>
+            <span id="latestReportBadge" class="latest-badge" style="display:none;"></span>
             
             <div class="toggle-container">
                 <span class="toggle-label active" id="label-ttm">연환산(TTM)</span>
@@ -159,5 +160,20 @@
             window.dispatchEvent(new Event('resize'));
         }
     </script>
+
+    <!-- 차트 정보 모달 -->
+    <div id="chartInfoModal" class="chart-info-modal">
+        <div class="chart-info-content">
+            <button class="chart-info-close" onclick="closeChartModal()">&times;</button>
+            <div class="chart-info-title" id="chartModalTitle">차트 제목</div>
+            <div class="chart-info-body">
+                <h4>🎯 이용 목적</h4>
+                <p id="chartModalPurpose">이용 목적 텍스트</p>
+                <h4>💡 활용 방안 (시클리컬 가치 투자)</h4>
+                <p id="chartModalAction">활용 방안 텍스트</p>
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>

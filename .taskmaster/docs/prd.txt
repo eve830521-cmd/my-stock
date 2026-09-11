@@ -1,0 +1,27 @@
+# My Stock Dashboard v3.0 - AI Feedback Integration
+
+Based on feedback from ChatGPT and Claude, the following structural improvements need to be made to the dashboard's data processing and visualization logic:
+
+1. **Current Shares Retroactive Application Issue (Look-ahead Bias)**
+   - **Problem**: Dividing past earnings by the current (diluted) share count artificially lowers past EPS, raising the past PER band. This falsely triggers "undervaluation" buy signals for chronically diluting companies.
+   - **Solution**: Dualize the share count logic. Use "Point-in-Time Diluted Shares" (adjusted only for stock splits) for historical valuation bands (PER/PBR charts). Retain "Current Shares" only for current-day absolute valuation (e.g., S-RIM).
+
+2. **Normalized EPS Definition**
+   - **Problem**: The current formula `(OP * (1 - Tax) * Controlling Interest) / Shares` is actually a "Normalized Operating EPS" because it ignores interest expenses, treating highly leveraged companies identical to debt-free ones.
+   - **Solution**: Rename the metric to "Normalized Operating EPS" or adjust the formula to deduct interest expenses (`Normalized Parent Net Income`). Ensure the tax rate is defined (e.g., statutory vs effective).
+
+3. **Valuation Band Robustness (Thresholds and ±1SD)**
+   - **Problem**: Hardcoded thresholds (PER > 120, PBR > 10) are arbitrary. Also, valuation multiples are not normally distributed, making Mean ± 1SD statistically flawed.
+   - **Solution**: Replace or supplement the Mean ± 1SD bands with robust non-parametric statistics, specifically 10-year Median and Percentiles (e.g., 10th percentile for the buy zone, 90th percentile for the sell zone). Handle negative or near-zero EPS more gracefully (e.g., N/A instead of arbitrary exclusions).
+
+4. **Dynamic DART Reporting Dates (Look-ahead Bias)**
+   - **Problem**: Hardcoding May 15th for Q1 earnings mapping ignores early filers.
+   - **Solution**: Extract the exact `receipt_datetime` from DART for each report and match the historical stock prices strictly after this timestamp to perfectly eliminate look-ahead bias.
+
+5. **S-RIM Cyclical Trap**
+   - **Problem**: Using current ROE in the S-RIM calculation for a cyclical company replicates the "PER Trap" (i.e., high valuation at the cycle peak, low valuation at the trough).
+   - **Solution**: Explicitly define the ROE input for S-RIM as a "10-year Median ROE" or "Normalized ROE" to ensure the intrinsic value calculation is stable across cycles.
+
+6. **CAPEX Chart and Structural Decline Checks**
+   - **Problem**: `CAPEX / OP` becomes meaningless or extreme when OP is negative or near zero.
+   - **Solution**: Change the metric to `CAPEX / OCF` (Operating Cash Flow) or `CAPEX / Depreciation`. Add a structural decline warning or check if BPS drops significantly during severe cyclical troughs.
