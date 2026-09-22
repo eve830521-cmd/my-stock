@@ -69,10 +69,11 @@
         </div>
     </main>
 
-    <!-- 탭 2: 안전성 (차트 5) -->
+    <!-- 탭 2: 안전성 (차트 5, 5-1) -->
     <main id="tab-safety" class="tabcontent" style="display:none;">
         <div class="chart-grid">
             <div class="chart-box" id="chart5"></div>
+            <div class="chart-box" id="chart5_1"></div>
         </div>
     </main>
 
@@ -118,7 +119,7 @@
                         </div>
                         <label class="sync-checkbox-label">
                             <input type="checkbox" id="syncBandCheckbox" checked onchange="toggleSyncBands(this.checked)">
-                            <span>PER/PBR 연동</span>
+                            <span>PER/PBR/배당 연동</span>
                         </label>
                     </div>
                 </div>
@@ -149,6 +150,32 @@
                     </div>
                 </div>
                 <div class="chart-box" id="chart11"></div>
+            </div>
+
+            <!-- 12. 주가배당수익률 밴드 카드 -->
+            <div class="band-card">
+                <div class="band-toolbar" id="dyBandToolbar">
+                    <div class="band-toolbar-info">
+                        <span class="band-toolbar-title">12. 주가배당수익률 (Dividend Yield) 밴드</span>
+                        <span class="period-badge" id="dyPeriodBadge">조회기간: 전체</span>
+                    </div>
+                    <div class="band-toolbar-controls">
+                        <div class="preset-btn-group" id="dyPresetBtns">
+                            <button type="button" class="btn-period" onclick="setBandPeriod(11, 6)">6개월</button>
+                            <button type="button" class="btn-period" onclick="setBandPeriod(11, 12)">12개월</button>
+                            <button type="button" class="btn-period" onclick="setBandPeriod(11, 24)">24개월</button>
+                            <button type="button" class="btn-period" onclick="setBandPeriod(11, 36)">36개월</button>
+                            <button type="button" class="btn-period" onclick="setBandPeriod(11, 60)">60개월</button>
+                            <button type="button" class="btn-period active" onclick="setBandPeriod(11, 'all')">전체</button>
+                        </div>
+                        <div class="custom-period-group">
+                            <input type="number" id="dyMonthsInput" class="input-period-months" placeholder="개월" min="1" max="120" onkeypress="if(event.key==='Enter') applyCustomMonths(11)">
+                            <span class="unit-label">개월</span>
+                            <button type="button" class="btn-period-apply" onclick="applyCustomMonths(11)">적용</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="chart-box" id="chart12"></div>
             </div>
         </div>
     </main>

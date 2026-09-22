@@ -312,6 +312,10 @@ def compile_company_data(corp_name, start_year, end_year):
     sheet3.loc[sheet3['PER'] < 0, 'PER'] = np.nan 
     sheet3['PBR'] = sheet3['시가총액'] / sheet3['자본총계_safe']
     
+    # 배당성향 및 주당배당금(DPS) 추가
+    sheet3['배당성향'] = np.where((sheet3['당기순이익'] > 0) & (sheet3['배당금'] > 0), (sheet3['배당금'] / sheet3['당기순이익']) * 100, np.nan)
+    sheet3['DPS'] = np.where((sheet3['현재주식수'] > 0) & (sheet3['배당금'] > 0), sheet3['배당금'] / sheet3['현재주식수'], np.nan)
+
     # NaN 값들은 그대로 두어 JSON 시리얼라이즈 시 null로 전달되게 함 (ECharts가 자동 무시하여 차트 안 찌그러짐)
     sheet3 = sheet3.replace([np.inf, -np.inf], np.nan)
     sheet3.drop(columns=['매출액_safe', '자본총계_safe', '지배순이익_safe', '투하자본_safe', '이자비용_safe'], inplace=True)
@@ -333,6 +337,7 @@ def compile_company_data(corp_name, start_year, end_year):
     # 과거 PER/PBR 비율이 왜곡 없이 유지됨. 최신 주식수(현재주식수)로 나누면 자동 달성.
     sheet3['정상화EPS'] = np.where(sheet3['현재주식수'] > 0, sheet3['정상화영업이익'] / sheet3['현재주식수'], np.nan)
     sheet3['BPS'] = np.where(sheet3['현재주식수'] > 0, sheet3['자본총계'] / sheet3['현재주식수'], np.nan)
+    sheet3['수정DPS'] = np.where(sheet3['현재주식수'] > 0, sheet3['배당금'] / sheet3['현재주식수'], np.nan)
     
     report_dates = []
     for i, row in sheet3.iterrows():
@@ -370,7 +375,7 @@ def compile_company_data(corp_name, start_year, end_year):
     roe_10y_median = sheet3['ROE'].dropna().median() if not sheet3['ROE'].dropna().empty else 8.0
     sheet3['ROE_10Y_Median'] = roe_10y_median
     
-    df_q = sheet3[['ReportDate', '정상화EPS', 'BPS', 'Year', 'Quarter', 'ROE', 'ROE_10Y_Median']].copy()
+    df_q = sheet3[['ReportDate', '정상화EPS', 'BPS', '수정DPS', 'Year', 'Quarter', 'ROE', 'ROE_10Y_Median']].copy()
     df_q.set_index('ReportDate', inplace=True)
     
     # 10년 치 주가 가져오기
@@ -389,12 +394,15 @@ def compile_company_data(corp_name, start_year, end_year):
         
         # --- 1. TTM 밴드 (월별) ---
         df_combined = pd.concat([df_prices, df_q], axis=1).sort_index()
-        df_combined[['정상화EPS', 'BPS', 'Year', 'Quarter', 'ROE', 'ROE_10Y_Median']] = df_combined[['정상화EPS', 'BPS', 'Year', 'Quarter', 'ROE', 'ROE_10Y_Median']].ffill()
+        df_combined[['정상화EPS', 'BPS', '수정DPS', 'Year', 'Quarter', 'ROE', 'ROE_10Y_Median']] = df_combined[['정상화EPS', 'BPS', '수정DPS', 'Year', 'Quarter', 'ROE', 'ROE_10Y_Median']].ffill()
         df_monthly_band = df_combined.loc[df_prices.index].copy()
         
         # PER은 양수일때만 계산 (음수면 N/A)
         df_monthly_band['PER'] = np.where(df_monthly_band['정상화EPS'] > 0, df_monthly_band['price'] / df_monthly_band['정상화EPS'], np.nan)
         df_monthly_band['PBR'] = np.where(df_monthly_band['BPS'] > 0, df_monthly_band['price'] / df_monthly_band['BPS'], np.nan)
+        
+        # 배당수익률(%) 계산 (price > 0 및 수정DPS > 0 일 때만 계산)
+        df_monthly_band['배당수익률'] = np.where((df_monthly_band['price'] > 0) & (df_monthly_band['수정DPS'] > 0), (df_monthly_band['수정DPS'] / df_monthly_band['price']) * 100, np.nan)
         
         valid_per = df_monthly_band['PER'].dropna()
         # 아웃라이어 필터 제거, 백분위로 처리
@@ -407,6 +415,12 @@ def compile_company_data(corp_name, start_year, end_year):
         pbr_10th = valid_pbr.quantile(0.1) if not valid_pbr.empty else np.nan
         pbr_90th = valid_pbr.quantile(0.9) if not valid_pbr.empty else np.nan
         
+        # 배당수익률 밴드 통계 (배당금 지급된 유효 구간만 필터링)
+        valid_dy = df_monthly_band['배당수익률'].dropna().loc[lambda x: x > 0]
+        dy_median = valid_dy.median() if not valid_dy.empty else np.nan
+        dy_10th = valid_dy.quantile(0.1) if not valid_dy.empty else np.nan # 저배당 / 주가 천장선
+        dy_90th = valid_dy.quantile(0.9) if not valid_dy.empty else np.nan # 고배당 / 주가 바닥선 (안전마진)
+        
         df_monthly_band['PER_Average'] = per_median
         df_monthly_band['PER_Plus1SD'] = per_90th
         df_monthly_band['PER_Minus1SD'] = per_10th
@@ -418,6 +432,12 @@ def compile_company_data(corp_name, start_year, end_year):
         df_monthly_band['PBR_Minus1SD'] = pbr_10th
         df_monthly_band['PBR_Max'] = valid_pbr.max() if not valid_pbr.empty else np.nan
         df_monthly_band['PBR_Min'] = valid_pbr.min() if not valid_pbr.empty else np.nan
+        
+        df_monthly_band['DY_Average'] = dy_median
+        df_monthly_band['DY_Plus1SD'] = dy_90th
+        df_monthly_band['DY_Minus1SD'] = dy_10th
+        df_monthly_band['DY_Max'] = valid_dy.max() if not valid_dy.empty else np.nan
+        df_monthly_band['DY_Min'] = valid_dy.min() if not valid_dy.empty else np.nan
         
         df_monthly_band['Current_ROE'] = df_monthly_band['ROE']
         df_monthly_band['Median_ROE'] = df_monthly_band['ROE_10Y_Median']
@@ -438,8 +458,9 @@ def compile_company_data(corp_name, start_year, end_year):
         sheet4['정상화순이익'] = (sheet4['영업이익'] * (1 - sheet4['법인세율'])) * sheet4['지배비율']
         sheet4['정상화EPS'] = np.where(sheet4['현재주식수'] > 0, sheet4['정상화순이익'] / sheet4['현재주식수'], np.nan)
         sheet4['BPS'] = np.where(sheet4['현재주식수'] > 0, sheet4['자본총계'] / sheet4['현재주식수'], np.nan)
+        sheet4['수정DPS'] = np.where(sheet4['현재주식수'] > 0, sheet4['배당금'] / sheet4['현재주식수'], np.nan)
         
-        df_annual = sheet4[['Year', '정상화EPS', 'BPS']].copy()
+        df_annual = sheet4[['Year', '정상화EPS', 'BPS', '수정DPS']].copy()
         
         # 12월 말 주가 필터링
         df_prices_dec = df_prices[df_prices.index.month == 12].copy()
@@ -451,6 +472,9 @@ def compile_company_data(corp_name, start_year, end_year):
         df_annual_band['PER'] = np.where(df_annual_band['정상화EPS'] > 0, df_annual_band['price'] / df_annual_band['정상화EPS'], np.nan)
         df_annual_band['PBR'] = np.where(df_annual_band['BPS'] > 0, df_annual_band['price'] / df_annual_band['BPS'], np.nan)
         
+        # 배당수익률(%) 계산 (price > 0 및 수정DPS > 0 일 때만 계산)
+        df_annual_band['배당수익률'] = np.where((df_annual_band['price'] > 0) & (df_annual_band['수정DPS'] > 0), (df_annual_band['수정DPS'] / df_annual_band['price']) * 100, np.nan)
+        
         valid_per_a = df_annual_band['PER'].dropna()
         per_median_a = valid_per_a.median() if not valid_per_a.empty else np.nan
         per_10th_a = valid_per_a.quantile(0.1) if not valid_per_a.empty else np.nan
@@ -460,6 +484,12 @@ def compile_company_data(corp_name, start_year, end_year):
         pbr_median_a = valid_pbr_a.median() if not valid_pbr_a.empty else np.nan
         pbr_10th_a = valid_pbr_a.quantile(0.1) if not valid_pbr_a.empty else np.nan
         pbr_90th_a = valid_pbr_a.quantile(0.9) if not valid_pbr_a.empty else np.nan
+        
+        # 배당수익률 밴드 통계 (배당금 지급된 유효 구간만 필터링)
+        valid_dy_a = df_annual_band['배당수익률'].dropna().loc[lambda x: x > 0]
+        dy_median_a = valid_dy_a.median() if not valid_dy_a.empty else np.nan
+        dy_10th_a = valid_dy_a.quantile(0.1) if not valid_dy_a.empty else np.nan
+        dy_90th_a = valid_dy_a.quantile(0.9) if not valid_dy_a.empty else np.nan
         
         df_annual_band['PER_Average'] = per_median_a
         df_annual_band['PER_Plus1SD'] = per_90th_a
@@ -472,6 +502,12 @@ def compile_company_data(corp_name, start_year, end_year):
         df_annual_band['PBR_Minus1SD'] = pbr_10th_a
         df_annual_band['PBR_Max'] = valid_pbr_a.max() if not valid_pbr_a.empty else np.nan
         df_annual_band['PBR_Min'] = valid_pbr_a.min() if not valid_pbr_a.empty else np.nan
+        
+        df_annual_band['DY_Average'] = dy_median_a
+        df_annual_band['DY_Plus1SD'] = dy_90th_a
+        df_annual_band['DY_Minus1SD'] = dy_10th_a
+        df_annual_band['DY_Max'] = valid_dy_a.max() if not valid_dy_a.empty else np.nan
+        df_annual_band['DY_Min'] = valid_dy_a.min() if not valid_dy_a.empty else np.nan
         
         df_annual_band['date'] = df_annual_band['date_str']
         sheet6 = df_annual_band.drop(columns=['date_str'], errors='ignore')

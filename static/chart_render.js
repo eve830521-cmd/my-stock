@@ -56,6 +56,16 @@ const chartExplanations = {
         title: "11. 주가순자산비율 (PBR) 밴드",
         purpose: "자산(BPS) 기준 현재 주가의 밸류에이션을 점검합니다. (시클리컬 투자의 핵심 지표)",
         action: "자산은 이익보다 변동성이 적어 든든한 기준점이 됩니다. 10년 평균 ROE가 훼손되지 않은 우량주가 역사적 최저점이나 하위 10% 밴드에 도달했을 때 적극적인 매수를 고려합니다."
+    },
+    11: { // 12번 차트
+        title: "12. 주가배당수익률 (Dividend Yield) 밴드",
+        purpose: "역사적 배당수익률의 상단/하단 밴드를 통해 주가의 배당 안전마진과 고평가/저평가 구간을 판단합니다.",
+        action: "배당수익률이 상위 10% 밴드(고배당 구간)에 도달했을 때는 배당 하방 지지력이 강력한 안전마진 매수 기회입니다. 반대로 하위 10% 밴드(저배당 구간)는 주가 고평가 신호로 활용합니다."
+    },
+    12: { // 5-1번 차트
+        title: "5-1. 연간 배당총액 및 배당성향 (안전성)",
+        purpose: "기업의 장기 배당 정책의 지속성과 성장성, 그리고 당기순이익 대비 연간 배당총액 지급 비율(배당성향)을 확인합니다.",
+        action: "연간 배당총액이 삭감 없이 꾸준히 유지/증가하는지 확인하고, 배당성향이 과도하게 높아(예: 80% 초과) 이익 체력을 넘어서는 무리한 배당인지, 아니면 실적 기반의 안정적 배당인지 판별합니다. 현재의 고배당수익률이 일시적인지 구조적인지 검증하는 데 필수적입니다."
     }
 };
 
@@ -81,7 +91,7 @@ document.addEventListener('click', function(e) {
 
 let currentMode = 'TTM'; // 'TTM' or 'Annual'
 let syncBandPeriods = true;
-let currentBandMonths = { 9: 'all', 10: 'all' };
+let currentBandMonths = { 9: 'all', 10: 'all', 11: 'all' };
 let isSyncingZoom = false;
 
 function toggleSyncBands(checked) {
@@ -91,6 +101,7 @@ function toggleSyncBands(checked) {
     if (syncBandPeriods) {
         let perMonths = currentBandMonths[9] || 'all';
         setBandPeriod(10, perMonths, true);
+        setBandPeriod(11, perMonths, true);
     }
 }
 
@@ -155,15 +166,18 @@ function setBandPeriod(chartIndex, months, fromSync = false) {
     let actualEnd = bandData[endIdx].date || bandData[endIdx].Year;
     updateBandPeriodUI(chartIndex, effectiveMonths, actualStart, actualEnd, isFull);
     
-    // 동기화 처리
+    // 동기화 처리 (9, 10, 11번 밴드)
     if (syncBandPeriods && !fromSync) {
-        let targetIndex = chartIndex === 9 ? 10 : 9;
-        setBandPeriod(targetIndex, months, true);
+        [9, 10, 11].forEach(targetIndex => {
+            if (targetIndex !== chartIndex) {
+                setBandPeriod(targetIndex, months, true);
+            }
+        });
     }
 }
 
 function applyCustomMonths(chartIndex) {
-    let inputId = chartIndex === 9 ? 'perMonthsInput' : 'pbrMonthsInput';
+    let inputId = chartIndex === 9 ? 'perMonthsInput' : (chartIndex === 10 ? 'pbrMonthsInput' : 'dyMonthsInput');
     let input = document.getElementById(inputId);
     if (!input || !input.value) return;
     let val = parseInt(input.value.trim());
@@ -175,7 +189,7 @@ function applyCustomMonths(chartIndex) {
 }
 
 function updateBandPeriodUI(chartIndex, effectiveMonths, startDateStr, endDateStr, isFull) {
-    let prefix = chartIndex === 9 ? 'per' : 'pbr';
+    let prefix = chartIndex === 9 ? 'per' : (chartIndex === 10 ? 'pbr' : 'dy');
     let badge = document.getElementById(`${prefix}PeriodBadge`);
     let input = document.getElementById(`${prefix}MonthsInput`);
     let presetContainer = document.getElementById(`${prefix}PresetBtns`);
@@ -208,20 +222,26 @@ function updateBandPeriodUI(chartIndex, effectiveMonths, startDateStr, endDateSt
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    // 11개 차트 초기화 (다크모드 테마 적용)
-    for (let i = 1; i <= 11; i++) {
-        let chartDom = document.getElementById('chart' + i);
+    // 13개 차트 초기화 (다크모드 테마 적용)
+    const chartIdList = [
+        'chart1', 'chart2', 'chart3', 'chart4', 'chart5',
+        'chart6', 'chart7', 'chart8', 'chart9', 'chart10',
+        'chart11', 'chart12', 'chart5_1'
+    ];
+    
+    chartIdList.forEach((id, idx) => {
+        let chartDom = document.getElementById(id);
         if (chartDom) {
             let chart = echarts.init(chartDom, 'dark');
-            charts.push(chart);
+            charts[idx] = chart;
 
             chart.on('click', function(params) {
                 if (params.componentType === 'title') {
-                    showChartModal(i - 1);
+                    showChartModal(idx);
                 }
             });
         }
-    }
+    });
     
     // 토글 스위치 이벤트 리스너 추가
     const toggle = document.getElementById('dataModeToggle');
@@ -436,6 +456,38 @@ function renderCharts(viewData) {
         ]
     });
 
+    // 5-1. 연간 배당금 및 배당성향 (안전성)
+    let annualList = (globalChartData && globalChartData.annual_data && globalChartData.annual_data.length > 0)
+        ? globalChartData.annual_data
+        : viewData.filter(d => !d.Quarter || d.Quarter === '4Q');
+    
+    let divXAxis = annualList.map(d => (d.Year ? d.Year + '년' : '-'));
+    applyOption(12, '5-1. 연간 배당총액 및 배당성향 (안전성)', {
+        xAxis: { type: 'category', data: divXAxis },
+        yAxis: [
+            { type: 'value', name: '연간 배당총액(원)', axisLabel: { formatter: yAxisFormatter }, scale: true },
+            { type: 'value', name: '배당성향(%)', axisLabel: { formatter: '{value}%' }, scale: true, splitLine: { show: false } }
+        ],
+        series: [
+            {
+                name: '연간 배당총액',
+                type: 'bar',
+                data: annualList.map(d => d['배당금'] || 0),
+                itemStyle: { color: '#5470c6' },
+                tooltip: { valueFormatter: (val) => val != null ? val.toLocaleString() + '원' : '-' }
+            },
+            {
+                name: '배당성향',
+                type: 'line',
+                yAxisIndex: 1,
+                data: annualList.map(d => (d['당기순이익'] > 0 && d['배당금'] > 0) ? round2((d['배당금'] / d['당기순이익']) * 100) : (d['배당성향'] != null ? round2(d['배당성향']) : null)),
+                lineStyle: { color: '#fac858', width: 3 },
+                itemStyle: { color: '#fac858' },
+                tooltip: { valueFormatter: (val) => val != null ? val + '%' : '-' }
+            }
+        ]
+    });
+
     // 6. 순 단기금융자산 & 당기순이익
     applyOption(5, '6. 잉여 자금 및 실적', {
         xAxis: { type: 'category', data: xAxisData },
@@ -493,8 +545,10 @@ function renderCharts(viewData) {
         // 툴바 표시
         let perToolbar = document.getElementById('perBandToolbar');
         let pbrToolbar = document.getElementById('pbrBandToolbar');
+        let dyToolbar = document.getElementById('dyBandToolbar');
         if (perToolbar) perToolbar.style.display = 'flex';
         if (pbrToolbar) pbrToolbar.style.display = 'flex';
+        if (dyToolbar) dyToolbar.style.display = 'flex';
         
         let bandXAxis = bandData.map(d => d.date || d.Year);
         let currentPrice = viewData.length > 0 && viewData[0]['주가'] ? viewData[0]['주가'].toLocaleString() : '-';
@@ -507,11 +561,13 @@ function renderCharts(viewData) {
             return value.toLocaleString() + '원';
         };
         
+        // 10. PER 차트 (밴드 데이터 연동, 우측 주가축 왜곡 방지를 위해 환산주가는 숨김 3축에 격리)
         applyOption(9, `10. 주가수익비율 (PER) 밴드 ${bandLabel} (현재 주가: ${currentPrice}원)`, {
             xAxis: { type: 'category', data: bandXAxis },
             yAxis: [
                 { type: 'value', name: 'PER(배)', scale: true },
-                { type: 'value', name: '주가(원)', scale: true, splitLine: { show: false }, axisLabel: { formatter: yAxisFormatter } }
+                { type: 'value', name: '주가(원)', scale: true, splitLine: { show: false }, axisLabel: { formatter: yAxisFormatter } },
+                { type: 'value', show: false }
             ],
             series: [
                 { name: '역사적 최고점', type: 'line', data: bandData.map(d => round2(d['PER_Max'])), lineStyle: { type: 'dashed', color: '#ff4d4f' }, symbol: 'none' },
@@ -532,20 +588,22 @@ function renderCharts(viewData) {
                 { 
                     name: '상위 10% 환산주가', 
                     type: 'line', 
-                    yAxisIndex: 1, 
+                    yAxisIndex: 2, 
                     data: bandData.map(d => d['정상화EPS'] ? Math.round(d['PER_Plus1SD'] * d['정상화EPS']) : null), 
                     lineStyle: { opacity: 0 }, 
                     itemStyle: { color: '#ffa39e' }, 
+                    symbol: 'none',
                     showSymbol: false, 
                     tooltip: { valueFormatter: priceFormatter } 
                 },
                 { 
                     name: '하위 10% 환산주가', 
                     type: 'line', 
-                    yAxisIndex: 1, 
+                    yAxisIndex: 2, 
                     data: bandData.map(d => d['정상화EPS'] ? Math.round(d['PER_Minus1SD'] * d['정상화EPS']) : null), 
                     lineStyle: { opacity: 0 }, 
                     itemStyle: { color: '#91caff' }, 
+                    symbol: 'none',
                     showSymbol: false, 
                     tooltip: { valueFormatter: priceFormatter } 
                 }
@@ -615,10 +673,60 @@ function renderCharts(viewData) {
                 }
             ]
         });
+
+        // 12. 배당수익률 차트 (밴드 데이터 연동)
+        applyOption(11, `12. 주가배당수익률 (Dividend Yield) 밴드 ${bandLabel} (현재 주가: ${currentPrice}원)`, {
+            xAxis: { type: 'category', data: bandXAxis },
+            yAxis: [
+                { type: 'value', name: '배당수익률(%)', scale: true },
+                { type: 'value', name: '주가(원)', scale: true, splitLine: { show: false }, axisLabel: { formatter: yAxisFormatter } },
+                { type: 'value', show: false }
+            ],
+            series: [
+                { name: '역사적 최고점', type: 'line', data: bandData.map(d => round2(d['DY_Max'])), lineStyle: { type: 'dashed', color: '#ff4d4f' }, symbol: 'none' },
+                { name: '상위 10%', type: 'line', data: bandData.map(d => round2(d['DY_Plus1SD'])), lineStyle: { type: 'dashed', color: '#ffa39e' }, symbol: 'none' },
+                { name: '10년 중앙값', type: 'line', data: bandData.map(d => round2(d['DY_Average'])), lineStyle: { color: '#e6a23c', width: 4 }, symbol: 'none' },
+                { name: '하위 10%', type: 'line', data: bandData.map(d => round2(d['DY_Minus1SD'])), lineStyle: { type: 'dashed', color: '#91caff' }, symbol: 'none' },
+                { name: '역사적 최저점', type: 'line', data: bandData.map(d => round2(d['DY_Min'])), lineStyle: { type: 'dashed', color: '#1890ff' }, symbol: 'none' },
+                { name: '배당수익률', type: 'line', data: bandData.map(d => round2(d['배당수익률'])), lineStyle: { color: '#ffffff', width: 2 }, itemStyle: { color: '#ffffff' }, areaStyle: { opacity: 0.1 }, symbol: 'none' },
+                { 
+                    name: '주가', 
+                    type: 'line', 
+                    yAxisIndex: 1, 
+                    data: bandData.map(d => d['price']), 
+                    lineStyle: { color: '#00ff00', width: 2 }, 
+                    symbol: 'none',
+                    tooltip: { valueFormatter: priceFormatter }
+                },
+                { 
+                    name: '상위 10% 환산주가 (안전마진)', 
+                    type: 'line', 
+                    yAxisIndex: 2, 
+                    data: bandData.map(d => (d['수정DPS'] && d['DY_Plus1SD'] > 0) ? Math.round(d['수정DPS'] / (d['DY_Plus1SD'] / 100)) : null), 
+                    lineStyle: { opacity: 0 }, 
+                    itemStyle: { color: '#ffa39e' }, 
+                    symbol: 'none',
+                    showSymbol: false, 
+                    tooltip: { valueFormatter: priceFormatter } 
+                },
+                { 
+                    name: '하위 10% 환산주가 (저배당)', 
+                    type: 'line', 
+                    yAxisIndex: 2, 
+                    data: bandData.map(d => (d['수정DPS'] && d['DY_Minus1SD'] > 0) ? Math.round(d['수정DPS'] / (d['DY_Minus1SD'] / 100)) : null), 
+                    lineStyle: { opacity: 0 }, 
+                    itemStyle: { color: '#91caff' }, 
+                    symbol: 'none',
+                    showSymbol: false, 
+                    tooltip: { valueFormatter: priceFormatter } 
+                }
+            ]
+        });
         
         // --- 동적 줌(Zoom) 시 밴드 재계산 및 기간 표시 연동 ---
         const updateBands = (chartIndex, key, titlePrefix) => {
             let chart = charts[chartIndex];
+            if (!chart) return;
             setTimeout(() => {
                 let opt = chart.getOption();
                 let startIdx = 0;
@@ -661,39 +769,50 @@ function renderCharts(viewData) {
                     let max = vals[vals.length - 1];
                     let min = vals[0];
                     
+                    let unit = key === '배당수익률' ? '%' : '배';
+                    let targetP90 = d => (key === 'PER' ? (d['정상화EPS'] ? Math.round(p90 * d['정상화EPS']) : null) : (key === 'PBR' ? (d['BPS'] ? Math.round(p90 * d['BPS']) : null) : ((d['수정DPS'] && p90 > 0) ? Math.round(d['수정DPS'] / (p90 / 100)) : null)));
+                    let targetP10 = d => (key === 'PER' ? (d['정상화EPS'] ? Math.round(p10 * d['정상화EPS']) : null) : (key === 'PBR' ? (d['BPS'] ? Math.round(p10 * d['BPS']) : null) : ((d['수정DPS'] && p10 > 0) ? Math.round(d['수정DPS'] / (p10 / 100)) : null)));
+
                     chart.setOption({
-                        title: { text: `${titlePrefix} ${bandLabel} (현재 주가: ${currentPrice}원, 확대구간 중앙값: ${round2(median)}배)`, left: 'center', top: 0, triggerEvent: true },
+                        title: { text: `${titlePrefix} ${bandLabel} (현재 주가: ${currentPrice}원, 확대구간 중앙값: ${round2(median)}${unit})`, left: 'center', top: 0, triggerEvent: true },
                         series: [
                             { data: bandData.map(() => round2(max)) },
                             { data: bandData.map(() => round2(p90)) },
                             { data: bandData.map(() => round2(median)) },
                             { data: bandData.map(() => round2(p10)) },
                             { data: bandData.map(() => round2(min)) },
-                            {}, // 실제 값(PER/PBR)
+                            {}, // 실제 값(PER/PBR/배당수익률)
                             {}, // 주가
-                            { data: bandData.map(d => key === 'PER' ? (d['정상화EPS'] ? Math.round(p90 * d['정상화EPS']) : null) : (d['BPS'] ? Math.round(p90 * d['BPS']) : null)) },
-                            { data: bandData.map(d => key === 'PER' ? (d['정상화EPS'] ? Math.round(p10 * d['정상화EPS']) : null) : (d['BPS'] ? Math.round(p10 * d['BPS']) : null)) }
+                            { data: bandData.map(targetP90) },
+                            { data: bandData.map(targetP10) }
                         ]
+                    });
+                } else {
+                    chart.setOption({
+                        title: { text: `${titlePrefix} ${bandLabel} (현재 주가: ${currentPrice}원, 확대구간 중앙값: -)`, left: 'center', top: 0, triggerEvent: true }
                     });
                 }
 
-                // 슬라이더 조작 시 PER/PBR 동기화
+                // 슬라이더 조작 시 PER/PBR/배당수익률 전체 동기화
                 if (syncBandPeriods && !isSyncingZoom) {
-                    let targetIndex = chartIndex === 9 ? 10 : 9;
-                    let targetChart = charts[targetIndex];
-                    if (targetChart && opt.dataZoom && opt.dataZoom[0]) {
-                        isSyncingZoom = true;
-                        targetChart.setOption({
-                            dataZoom: [
-                                { type: 'inside', start: opt.dataZoom[0].start, end: opt.dataZoom[0].end },
-                                { type: 'slider', start: opt.dataZoom[0].start, end: opt.dataZoom[0].end }
-                            ]
-                        });
-                        let targetKey = targetIndex === 9 ? 'PER' : 'PBR';
-                        let targetPrefix = targetIndex === 9 ? '10. 주가수익비율 (PER) 밴드' : '11. 주가순자산비율 (PBR) 밴드';
-                        updateBands(targetIndex, targetKey, targetPrefix);
-                        setTimeout(() => { isSyncingZoom = false; }, 80);
-                    }
+                    [9, 10, 11].forEach(targetIndex => {
+                        if (targetIndex !== chartIndex) {
+                            let targetChart = charts[targetIndex];
+                            if (targetChart && opt.dataZoom && opt.dataZoom[0]) {
+                                isSyncingZoom = true;
+                                targetChart.setOption({
+                                    dataZoom: [
+                                        { type: 'inside', start: opt.dataZoom[0].start, end: opt.dataZoom[0].end },
+                                        { type: 'slider', start: opt.dataZoom[0].start, end: opt.dataZoom[0].end }
+                                    ]
+                                });
+                                let targetKey = targetIndex === 9 ? 'PER' : (targetIndex === 10 ? 'PBR' : '배당수익률');
+                                let targetPrefix = targetIndex === 9 ? '10. 주가수익비율 (PER) 밴드' : (targetIndex === 10 ? '11. 주가순자산비율 (PBR) 밴드' : '12. 주가배당수익률 (Dividend Yield) 밴드');
+                                updateBands(targetIndex, targetKey, targetPrefix);
+                            }
+                        }
+                    });
+                    setTimeout(() => { isSyncingZoom = false; }, 80);
                 }
             }, 50);
         };
@@ -701,28 +820,30 @@ function renderCharts(viewData) {
         window.updateBandChart = (chartIndex) => {
             if (chartIndex === 9) updateBands(9, 'PER', '10. 주가수익비율 (PER) 밴드');
             else if (chartIndex === 10) updateBands(10, 'PBR', '11. 주가순자산비율 (PBR) 밴드');
+            else if (chartIndex === 11) updateBands(11, '배당수익률', '12. 주가배당수익률 (Dividend Yield) 밴드');
         };
 
         charts[9].off('dataZoom');
         charts[9].on('dataZoom', () => updateBands(9, 'PER', '10. 주가수익비율 (PER) 밴드'));
         charts[10].off('dataZoom');
         charts[10].on('dataZoom', () => updateBands(10, 'PBR', '11. 주가순자산비율 (PBR) 밴드'));
+        charts[11].off('dataZoom');
+        charts[11].on('dataZoom', () => updateBands(11, '배당수익률', '12. 주가배당수익률 (Dividend Yield) 밴드'));
 
         // 초기 기간 반영
         let initialPeriod = currentBandMonths[9] || 'all';
         setBandPeriod(9, initialPeriod, true);
-        if (!syncBandPeriods && currentBandMonths[10]) {
-            setBandPeriod(10, currentBandMonths[10], true);
-        } else {
-            setBandPeriod(10, initialPeriod, true);
-        }
+        setBandPeriod(10, initialPeriod, true);
+        setBandPeriod(11, initialPeriod, true);
 
     } else {
         // 과거 캐시 등 밴드 데이터가 없을 경우 Fallback
         let perToolbar = document.getElementById('perBandToolbar');
         let pbrToolbar = document.getElementById('pbrBandToolbar');
+        let dyToolbar = document.getElementById('dyBandToolbar');
         if (perToolbar) perToolbar.style.display = 'none';
         if (pbrToolbar) pbrToolbar.style.display = 'none';
+        if (dyToolbar) dyToolbar.style.display = 'none';
 
         applyOption(9, '10. 주가수익비율 (PER) 밴드', {
             xAxis: { type: 'category', data: xAxisData },
@@ -736,6 +857,13 @@ function renderCharts(viewData) {
             yAxis: { type: 'value', name: 'PBR(배)', scale: true },
             series: [
                 { name: 'PBR', type: 'line', data: viewData.map(d => round2(d['PBR'])), areaStyle: { opacity: 0.2 } }
+            ]
+        });
+        applyOption(11, '12. 주가배당수익률 (Dividend Yield) 밴드', {
+            xAxis: { type: 'category', data: xAxisData },
+            yAxis: { type: 'value', name: '배당수익률(%)', scale: true },
+            series: [
+                { name: '배당수익률', type: 'line', data: viewData.map(d => round2(d['배당수익률'])), areaStyle: { opacity: 0.2 } }
             ]
         });
     }
