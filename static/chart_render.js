@@ -562,10 +562,18 @@ function renderCharts(viewData) {
         };
         
         // 10. PER 차트 (밴드 데이터 연동, 우측 주가축 왜곡 방지를 위해 환산주가는 숨김 3축에 격리)
+        // 극단적 이상치(ISC 4,526배, 두산테스나 634배 등 EPS 0원 수렴) 발생 시에만 선택적 스마트 캡 적용 (정상 기업 왜곡 0%)
+        let pMax = (bandData.length > 0 && bandData[0]['PER_Max']) ? bandData[0]['PER_Max'] : 0;
+        let p90 = (bandData.length > 0 && bandData[0]['PER_Plus1SD']) ? bandData[0]['PER_Plus1SD'] : 0;
+        let perYAxisOpt = { type: 'value', name: 'PER(배)', scale: true };
+        if (p90 > 0 && (pMax / p90 > 3.0) && pMax > 150) {
+            perYAxisOpt.max = Math.max(150, Math.ceil(p90 * 1.5));
+        }
+
         applyOption(9, `10. 주가수익비율 (PER) 밴드 ${bandLabel} (현재 주가: ${currentPrice}원)`, {
             xAxis: { type: 'category', data: bandXAxis },
             yAxis: [
-                { type: 'value', name: 'PER(배)', scale: true },
+                perYAxisOpt,
                 { type: 'value', name: '주가(원)', scale: true, splitLine: { show: false }, axisLabel: { formatter: yAxisFormatter } },
                 { type: 'value', show: false }
             ],
@@ -773,8 +781,18 @@ function renderCharts(viewData) {
                     let targetP90 = d => (key === 'PER' ? (d['정상화EPS'] ? Math.round(p90 * d['정상화EPS']) : null) : (key === 'PBR' ? (d['BPS'] ? Math.round(p90 * d['BPS']) : null) : ((d['수정DPS'] && p90 > 0) ? Math.round(d['수정DPS'] / (p90 / 100)) : null)));
                     let targetP10 = d => (key === 'PER' ? (d['정상화EPS'] ? Math.round(p10 * d['정상화EPS']) : null) : (key === 'PBR' ? (d['BPS'] ? Math.round(p10 * d['BPS']) : null) : ((d['수정DPS'] && p10 > 0) ? Math.round(d['수정DPS'] / (p10 / 100)) : null)));
 
+                    let yAxisUpdate = [];
+                    if (key === 'PER') {
+                        if (p90 > 0 && (max / p90 > 3.0) && max > 150) {
+                            yAxisUpdate = [{ max: Math.max(150, Math.ceil(p90 * 1.5)) }];
+                        } else {
+                            yAxisUpdate = [{ max: null }];
+                        }
+                    }
+
                     chart.setOption({
                         title: { text: `${titlePrefix} ${bandLabel} (현재 주가: ${currentPrice}원, 확대구간 중앙값: ${round2(median)}${unit})`, left: 'center', top: 0, triggerEvent: true },
+                        ...(yAxisUpdate.length > 0 ? { yAxis: yAxisUpdate } : {}),
                         series: [
                             { data: bandData.map(() => round2(max)) },
                             { data: bandData.map(() => round2(p90)) },
