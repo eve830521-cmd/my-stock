@@ -173,6 +173,13 @@
                             <span class="unit-label">개월</span>
                             <button type="button" class="btn-period-apply" onclick="applyCustomMonths(11)">적용</button>
                         </div>
+                        <div class="sim-group" style="display:flex; align-items:center; gap:6px; margin-left:6px;">
+                            <button type="button" id="dySimToggleBtn" class="btn-period btn-sim" onclick="toggleDySimulation()" title="특정 과거 연도의 배당금을 최신 주가에 대입하여 배당수익률을 시뮬레이션합니다.">배당 시뮬레이션</button>
+                            <div id="dySimControls" style="display:none; align-items:center; gap:6px;">
+                                <select id="dySimYearSelect" class="sim-year-select" onchange="onDySimYearChange()"></select>
+                                <span id="dySimBadge" class="sim-badge"></span>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="chart-box" id="chart12"></div>

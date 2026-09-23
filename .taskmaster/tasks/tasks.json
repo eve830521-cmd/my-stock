@@ -110,13 +110,44 @@
         }
       ],
       "updatedAt": "2026-09-22T06:29:46.443Z"
+    },
+    {
+      "id": "5",
+      "title": "12. 주가배당수익률 밴드 기준연도 배당 시뮬레이션 및 원복 기능 구현",
+      "description": "차트 12 툴바에 배당 시뮬레이션 토글 버튼과 연도 선택 드롭다운을 추가하여, 활성화 시 선택 연도의 배당금(DPS)을 최근 주가에 반영해 배당수익률 및 환산주가를 동적 재계산하고, 비활성화 시 최근 사업보고서 기준 수치로 즉각 원복하는 기능을 구현합니다.",
+      "status": "done",
+      "priority": "high",
+      "dependencies": [
+        "4"
+      ],
+      "subtasks": [
+        {
+          "id": "5.1",
+          "title": "static/index.html 툴바 마크업 (토글 버튼, 연도 드롭다운, 상태 배지)",
+          "status": "done",
+          "parentId": "5"
+        },
+        {
+          "id": "5.2",
+          "title": "static/chart_render.js 시뮬레이션 계산, 동적 갱신 및 원복 로직 구현",
+          "status": "done",
+          "parentId": "5"
+        },
+        {
+          "id": "5.3",
+          "title": "Playwright 브라우저 자동화를 통한 활성화/비활성화/연도변경 실측 검증",
+          "status": "done",
+          "parentId": "5"
+        }
+      ],
+      "updatedAt": "2026-09-23T16:27:00.000Z"
     }
   ],
   "metadata": {
     "version": "1.0.0",
-    "lastModified": "2026-09-22T06:29:46.443Z",
-    "taskCount": 4,
-    "completedCount": 4,
+    "lastModified": "2026-09-23T16:27:00.000Z",
+    "taskCount": 5,
+    "completedCount": 5,
     "tags": [
       "master"
     ]

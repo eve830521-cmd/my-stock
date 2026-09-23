@@ -89,6 +89,8 @@ document.addEventListener('click', function(e) {
     }
 });
 
+const round2 = (val) => (val != null && typeof val === 'number' && !isNaN(val)) ? Math.round(val * 100) / 100 : null;
+
 let currentMode = 'TTM'; // 'TTM' or 'Annual'
 let syncBandPeriods = true;
 let currentBandMonths = { 9: 'all', 10: 'all', 11: 'all' };
@@ -221,6 +223,208 @@ function updateBandPeriodUI(chartIndex, effectiveMonths, startDateStr, endDateSt
     }
 }
 
+// --- 12. 주가배당수익률 밴드 기준연도 배당 시뮬레이션 상태 및 함수 ---
+let isDySimActive = false;
+let selectedDySimYear = null;
+let originalBandDataBackup = null;
+
+function populateDySimYears() {
+    const toggleBtn = document.getElementById('dySimToggleBtn');
+    const select = document.getElementById('dySimYearSelect');
+    const controls = document.getElementById('dySimControls');
+    const badge = document.getElementById('dySimBadge');
+    if (!select) return;
+
+    // 시뮬레이션 상태 초기화
+    isDySimActive = false;
+    selectedDySimYear = null;
+    originalBandDataBackup = null;
+    if (toggleBtn) {
+        toggleBtn.classList.remove('active');
+        toggleBtn.style.display = 'none';
+    }
+    if (controls) controls.style.display = 'none';
+    if (badge) badge.textContent = '';
+    select.innerHTML = '';
+
+    if (!globalChartData || !globalChartData.annual_data || globalChartData.annual_data.length === 0) {
+        return;
+    }
+
+    // 배당금 또는 수정DPS가 0보다 큰 연도 추출 (내림차순 정렬)
+    let divYears = globalChartData.annual_data
+        .filter(d => (d['수정DPS'] && d['수정DPS'] > 0) || (d['배당금'] && d['배당금'] > 0))
+        .map(d => ({
+            year: d.Year,
+            dps: d['수정DPS'] || (d['현재주식수'] > 0 ? d['배당금'] / d['현재주식수'] : 0)
+        }))
+        .sort((a, b) => b.year - a.year);
+
+    if (divYears.length === 0) {
+        return; // 배당 이력이 없는 기업의 경우 버튼 숨김 유지
+    }
+
+    if (toggleBtn) toggleBtn.style.display = 'inline-block';
+
+    divYears.forEach(item => {
+        let opt = document.createElement('option');
+        opt.value = item.year;
+        opt.textContent = `${item.year}년 (DPS: ${Math.round(item.dps).toLocaleString()}원)`;
+        select.appendChild(opt);
+    });
+
+    select.selectedIndex = 0;
+    selectedDySimYear = divYears[0].year;
+}
+
+function toggleDySimulation() {
+    isDySimActive = !isDySimActive;
+    const toggleBtn = document.getElementById('dySimToggleBtn');
+    const controls = document.getElementById('dySimControls');
+
+    if (isDySimActive) {
+        if (toggleBtn) toggleBtn.classList.add('active');
+        if (controls) controls.style.display = 'flex';
+
+        const select = document.getElementById('dySimYearSelect');
+        if (select && select.value) {
+            selectedDySimYear = parseInt(select.value);
+        }
+        applyDySimulation();
+    } else {
+        if (toggleBtn) toggleBtn.classList.remove('active');
+        if (controls) controls.style.display = 'none';
+        restoreOriginalDyBand();
+    }
+}
+
+function onDySimYearChange() {
+    const select = document.getElementById('dySimYearSelect');
+    if (!select) return;
+    selectedDySimYear = parseInt(select.value);
+    if (isDySimActive) {
+        applyDySimulation();
+    }
+}
+
+function applyDySimulation() {
+    if (!window.currentBandData || window.currentBandData.length === 0) return;
+    if (!globalChartData || !globalChartData.annual_data) return;
+
+    // 1. 원본 데이터 최초 1회 백업
+    if (!originalBandDataBackup) {
+        originalBandDataBackup = JSON.parse(JSON.stringify(window.currentBandData));
+    }
+
+    // 2. 선택된 연도의 수정DPS 찾기
+    let targetAnnual = globalChartData.annual_data.find(d => d.Year == selectedDySimYear);
+    if (!targetAnnual) return;
+    let simDPS = targetAnnual['수정DPS'] || (targetAnnual['현재주식수'] > 0 ? targetAnnual['배당금'] / targetAnnual['현재주식수'] : 0);
+    if (!simDPS || simDPS <= 0) return;
+
+    // 3. 백업 데이터로부터 항상 깨끗하게 시작 (누적 오염 방지)
+    let bandData = JSON.parse(JSON.stringify(originalBandDataBackup));
+    window.currentBandData = bandData;
+
+    // 4. [옵션 B 확정] 오직 맨 마지막 최신 시점(현재 주가) 1개 포인트만 simDPS 기준으로 계산
+    let lastIdx = bandData.length - 1;
+    let latestPrice = bandData[lastIdx]['price'];
+    bandData[lastIdx]['수정DPS'] = simDPS;
+    if (latestPrice && latestPrice > 0) {
+        bandData[lastIdx]['배당수익률'] = (simDPS / latestPrice) * 100;
+    }
+
+    // 5. 최신 시뮬레이션 배당수익률
+    let latestSimDY = (simDPS / latestPrice) * 100;
+
+    // 6. UI 상태 배지 업데이트
+    let badge = document.getElementById('dySimBadge');
+    if (badge) {
+        badge.textContent = `${selectedDySimYear}년 배당(DPS: ${Math.round(simDPS).toLocaleString()}원) 반영 → 최신 배당수익률: ${round2(latestSimDY)}%`;
+    }
+
+    // 7. 차트 12 업데이트
+    let chart = charts[11];
+    if (chart) {
+        let useAnnualBand = (currentMode === 'Annual' && globalChartData.annual_band_data && globalChartData.annual_band_data.length > 0);
+        let bandLabel = useAnnualBand ? '(연간/연말종가)' : '(TTM/주말종가)';
+        let currentPriceFormatted = latestPrice ? latestPrice.toLocaleString() : '-';
+
+        let targetP90 = d => ((d['수정DPS'] && d['DY_Plus1SD'] > 0) ? Math.round(d['수정DPS'] / (d['DY_Plus1SD'] / 100)) : null);
+        let targetP10 = d => ((d['수정DPS'] && d['DY_Minus1SD'] > 0) ? Math.round(d['수정DPS'] / (d['DY_Minus1SD'] / 100)) : null);
+
+        chart.setOption({
+            title: {
+                text: `12. 주가배당수익률 (Dividend Yield) 밴드 ${bandLabel} [시뮬레이션: ${selectedDySimYear}년 DPS ${Math.round(simDPS).toLocaleString()}원 반영, 최신 수익률: ${round2(latestSimDY)}%] (현재 주가: ${currentPriceFormatted}원)`,
+                left: 'center',
+                top: 0,
+                triggerEvent: true
+            },
+            series: [
+                {}, {}, {}, {}, {},
+                { data: bandData.map(d => round2(d['배당수익률'])) }, // 5: 배당수익률
+                {}, // 6: 주가
+                { data: bandData.map(targetP90) }, // 7: 상위 10% 환산주가
+                { data: bandData.map(targetP10) }  // 8: 하위 10% 환산주가
+            ]
+        });
+
+        if (typeof window.updateBandChart === 'function') {
+            window.updateBandChart(11);
+        }
+    }
+}
+
+function restoreOriginalDyBand() {
+    if (!originalBandDataBackup) return;
+
+    // 1. 원본 데이터로 100% 완전 원복
+    window.currentBandData = JSON.parse(JSON.stringify(originalBandDataBackup));
+    originalBandDataBackup = null;
+    let bandData = window.currentBandData;
+
+    let lastIdx = bandData.length - 1;
+    let latestPrice = bandData[lastIdx]['price'];
+
+    // 2. UI 배지 초기화
+    let badge = document.getElementById('dySimBadge');
+    if (badge) badge.textContent = '';
+
+    // 3. 차트 12 원복
+    let chart = charts[11];
+    if (chart) {
+        let useAnnualBand = (currentMode === 'Annual' && globalChartData.annual_band_data && globalChartData.annual_band_data.length > 0);
+        let bandLabel = useAnnualBand ? '(연간/연말종가)' : '(TTM/주말종가)';
+        let currentPriceFormatted = latestPrice ? latestPrice.toLocaleString() : '-';
+
+        let targetP90 = d => ((d['수정DPS'] && d['DY_Plus1SD'] > 0) ? Math.round(d['수정DPS'] / (d['DY_Plus1SD'] / 100)) : null);
+        let targetP10 = d => ((d['수정DPS'] && d['DY_Minus1SD'] > 0) ? Math.round(d['수정DPS'] / (d['DY_Minus1SD'] / 100)) : null);
+
+        chart.setOption({
+            title: {
+                text: `12. 주가배당수익률 (Dividend Yield) 밴드 ${bandLabel} (현재 주가: ${currentPriceFormatted}원)`,
+                left: 'center',
+                top: 0,
+                triggerEvent: true
+            },
+            series: [
+                {}, {}, {}, {}, {},
+                { data: bandData.map(d => round2(d['배당수익률'])) },
+                {},
+                { data: bandData.map(targetP90) },
+                { data: bandData.map(targetP10) }
+            ]
+        });
+
+        if (typeof window.updateBandChart === 'function') {
+            window.updateBandChart(11);
+        }
+    }
+}
+
+window.toggleDySimulation = toggleDySimulation;
+window.onDySimYearChange = onDySimYearChange;
+
 document.addEventListener("DOMContentLoaded", () => {
     // 13개 차트 초기화 (다크모드 테마 적용)
     const chartIdList = [
@@ -253,6 +457,7 @@ document.addEventListener("DOMContentLoaded", () => {
             
             if (globalChartData) {
                 renderCharts(currentMode === 'TTM' ? globalChartData.ttm_data : globalChartData.annual_data);
+                populateDySimYears();
             }
         });
     }
@@ -327,6 +532,7 @@ async function searchData(corpName, startYear, endYear) {
         }
         
         renderCharts(currentMode === 'TTM' ? data.ttm_data : data.annual_data);
+        populateDySimYears();
         
         if (typeof renderDcfTab === 'function') {
             renderDcfTab(data);
@@ -735,6 +941,8 @@ function renderCharts(viewData) {
         const updateBands = (chartIndex, key, titlePrefix) => {
             let chart = charts[chartIndex];
             if (!chart) return;
+            let bandData = window.currentBandData || bandData;
+            if (!bandData || bandData.length === 0) return;
             setTimeout(() => {
                 let opt = chart.getOption();
                 let startIdx = 0;
@@ -790,8 +998,10 @@ function renderCharts(viewData) {
                         }
                     }
 
+                    let simTitleSuffix = (isDySimActive && key === '배당수익률' && selectedDySimYear) ? ` [시뮬레이션: ${selectedDySimYear}년 DPS 반영]` : '';
+
                     chart.setOption({
-                        title: { text: `${titlePrefix} ${bandLabel} (현재 주가: ${currentPrice}원, 확대구간 중앙값: ${round2(median)}${unit})`, left: 'center', top: 0, triggerEvent: true },
+                        title: { text: `${titlePrefix} ${bandLabel}${simTitleSuffix} (현재 주가: ${currentPrice}원, 확대구간 중앙값: ${round2(median)}${unit})`, left: 'center', top: 0, triggerEvent: true },
                         ...(yAxisUpdate.length > 0 ? { yAxis: yAxisUpdate } : {}),
                         series: [
                             { data: bandData.map(() => round2(max)) },
@@ -799,15 +1009,16 @@ function renderCharts(viewData) {
                             { data: bandData.map(() => round2(median)) },
                             { data: bandData.map(() => round2(p10)) },
                             { data: bandData.map(() => round2(min)) },
-                            {}, // 실제 값(PER/PBR/배당수익률)
+                            (key === '배당수익률' ? { data: bandData.map(d => round2(d['배당수익률'])) } : {}), // 배당수익률은 시뮬레이션 및 원복 최신 반영
                             {}, // 주가
                             { data: bandData.map(targetP90) },
                             { data: bandData.map(targetP10) }
                         ]
                     });
                 } else {
+                    let simTitleSuffix = (isDySimActive && key === '배당수익률' && selectedDySimYear) ? ` [시뮬레이션: ${selectedDySimYear}년 DPS 반영]` : '';
                     chart.setOption({
-                        title: { text: `${titlePrefix} ${bandLabel} (현재 주가: ${currentPrice}원, 확대구간 중앙값: -)`, left: 'center', top: 0, triggerEvent: true }
+                        title: { text: `${titlePrefix} ${bandLabel}${simTitleSuffix} (현재 주가: ${currentPrice}원, 확대구간 중앙값: -)`, left: 'center', top: 0, triggerEvent: true }
                     });
                 }
 

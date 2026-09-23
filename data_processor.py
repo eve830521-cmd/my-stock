@@ -51,6 +51,36 @@ def get_financial_data(corp_code, bsns_year, reprt_code):
         
     return data.get('list', [])
 
+def get_alot_matter_dividend(corp_code, bsns_year, reprt_code):
+    """
+    OpenDART /alotMatter.json (배당에 관한 사항)에서 해당 보고서의 현금배당금총액(원)을 추출.
+    정규 사업보고서(결산) 및 분/반기보고서 모두 지원하며, 미지급(-)인 경우 0.0 반환.
+    API 호출 실패 시 None 반환하여 기존 CF 기반 fallback 유지.
+    """
+    params = {
+        'corp_code': corp_code,
+        'bsns_year': str(bsns_year),
+        'reprt_code': reprt_code
+    }
+    data = fetch_dart_api("/alotMatter.json", params)
+    if not data or data.get('status') not in ('000', '013'):
+        return None
+    if data.get('status') == '013':
+        return 0.0
+        
+    for item in data.get('list', []):
+        se = item.get('se', '').replace(' ', '')
+        if '현금배당금총액' in se or '현금배당총액' in se:
+            thstrm = item.get('thstrm', '').replace(',', '').strip()
+            if thstrm and thstrm != '-':
+                try:
+                    return float(thstrm) * 1_000_000 # 백만원 -> 원 단위 변환
+                except ValueError:
+                    pass
+            return 0.0
+            
+    return 0.0
+
 def parse_financial_data(raw_list, rcept_no=None):
     extracted = {
         '자산총계': 0, '현금및현금성자산': 0, '단기금융자산': 0, '자본총계': 0,
@@ -181,6 +211,13 @@ def compile_company_data(corp_name, start_year, end_year):
                 parsed = parse_financial_data(data, rcept_no)
                 parsed['Year'] = year
                 parsed['Quarter'] = q_name
+                
+                # [배당금 정확성 패치: OpenDART alotMatter 공식 공시 연동]
+                # 현금흐름표의 1년 시차(지급 기준) 왜곡을 제거하고 실제 해당 사업연도/분기 결산 배당총액 반영
+                alot_div = get_alot_matter_dividend(corp_code, str(year), r_code)
+                if alot_div is not None:
+                    parsed['배당금'] = alot_div
+                    
                 raw_data_list.append(parsed)
     
     if not raw_data_list:
