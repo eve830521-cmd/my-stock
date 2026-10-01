@@ -1,13 +1,16 @@
 let currentDcfParams = {};
 
 function calculateCAGR(dataArray, key, years) {
-    if (dataArray.length < 2) return null;
+    if (!dataArray || dataArray.length < 2) return null;
     const end = dataArray[dataArray.length - 1];
     const startIndex = Math.max(0, dataArray.length - 1 - years);
     const start = dataArray[startIndex];
     const actualYears = dataArray.length - 1 - startIndex;
-    if (actualYears <= 0 || start[key] <= 0 || end[key] <= 0) return null;
-    return (Math.pow(end[key] / start[key], 1 / actualYears) - 1) * 100;
+    if (actualYears <= 0 || !start || !end) return null;
+    let startVal = start[key];
+    let endVal = end[key];
+    if (startVal === undefined || endVal === undefined || startVal <= 0 || endVal <= 0) return null;
+    return (Math.pow(endVal / startVal, 1 / actualYears) - 1) * 100;
 }
 
 function calculateMarginStats(dataArray, years) {
@@ -113,33 +116,54 @@ function renderDcfTab(data) {
                 </table>
             </div>
 
-            <!-- 2. 최근 5년 영업이익률 평균 -->
+            <!-- 2. 최근 영업이익성장률 평균 (기간 수기입력) -->
             <div style="flex:1;">
-                <h3 style="color:white;">2. 최근 5년 영업이익률 평균</h3>
-                <div style="margin-bottom:10px;">
-                    <span style="color:white; margin-right:15px; font-weight:bold;">가치평가 기준 선택:</span>
-                    <label style="color:white; cursor:pointer;"><input type="radio" name="baseMetric" value="NOPAT" checked> 영업이익(NOPAT)</label>
-                    <label style="color:white; cursor:pointer; margin-left:15px;"><input type="radio" name="baseMetric" value="FCF"> 잉여현금흐름(FCF)</label>
-                </div>
+                <h3 style="color:white;">2. 최근 영업이익성장률 평균</h3>
                 <table class="excel-table">
-                    <tr class="excel-header-row">
-                        <th>최고</th><th>평균</th><th>최저</th><th>긍정</th><th>중립</th><th>부정</th>
+                    <tr>
+                        <td>기간 1 (최대 10)</td>
+                        <td><input type="number" id="opYears1" class="excel-input" value="10"> 년</td>
+                        <td id="opCagr1" class="calc-value">-</td>
                     </tr>
                     <tr>
-                        <td class="calc-value" style="text-align:center;">${marginStats.max.toFixed(2)}%</td>
-                        <td class="calc-value" style="text-align:center;">${marginStats.avg.toFixed(2)}%</td>
-                        <td class="calc-value" style="text-align:center;">${marginStats.min.toFixed(2)}%</td>
-                        <td style="text-align:center;"><input type="number" id="scenMarginP" class="excel-input" value="${p_margin.toFixed(2)}">%</td>
-                        <td style="text-align:center;"><input type="number" id="scenMarginN" class="excel-input" value="${n_margin.toFixed(2)}">%</td>
-                        <td style="text-align:center;"><input type="number" id="scenMarginB" class="excel-input" value="${b_margin.toFixed(2)}">%</td>
+                        <td>기간 2</td>
+                        <td><input type="number" id="opYears2" class="excel-input" value="5"> 년</td>
+                        <td id="opCagr2" class="calc-value">-</td>
                     </tr>
+                    <tr class="excel-header-row"><th colspan="3">영업이익연평균 성장률 요약</th></tr>
+                    <tr><td colspan="2">최대</td><td id="opCagrMax" class="calc-value" style="color:#f59e0b;">-</td></tr>
+                    <tr><td colspan="2">평균</td><td id="opCagrAvg" class="calc-value">-</td></tr>
+                    <tr><td colspan="2">최저</td><td id="opCagrMin" class="calc-value" style="color:#ef4444;">-</td></tr>
                 </table>
-                <p style="color:#94a3b8; font-size:0.85rem;">* FCF 선택 시 '긍정/중립/부정' 이익률 입력값은 무시되고, N+1년부터 FCF 기준금액에 매출성장률이 곱해집니다.</p>
             </div>
         </div>
 
-        <!-- 3. 기타 내재가치 변수 -->
-        <h3 style="color:white;">3. 기타 내재가치 변수</h3>
+        <!-- 3. 최근 5년 영업이익률 평균 -->
+        <div style="margin-top:10px;">
+            <h3 style="color:white;">3. 최근 5년 영업이익률 평균</h3>
+            <div style="margin-bottom:10px;">
+                <span style="color:white; margin-right:15px; font-weight:bold;">가치평가 기준 선택:</span>
+                <label style="color:white; cursor:pointer;"><input type="radio" name="baseMetric" value="NOPAT" checked> 영업이익(NOPAT)</label>
+                <label style="color:white; cursor:pointer; margin-left:15px;"><input type="radio" name="baseMetric" value="FCF"> 잉여현금흐름(FCF)</label>
+            </div>
+            <table class="excel-table">
+                <tr class="excel-header-row">
+                    <th>최고</th><th>평균</th><th>최저</th><th>긍정</th><th>중립</th><th>부정</th>
+                </tr>
+                <tr>
+                    <td class="calc-value" style="text-align:center;">${marginStats.max.toFixed(2)}%</td>
+                    <td class="calc-value" style="text-align:center;">${marginStats.avg.toFixed(2)}%</td>
+                    <td class="calc-value" style="text-align:center;">${marginStats.min.toFixed(2)}%</td>
+                    <td style="text-align:center;"><input type="number" id="scenMarginP" class="excel-input" value="${p_margin.toFixed(2)}">%</td>
+                    <td style="text-align:center;"><input type="number" id="scenMarginN" class="excel-input" value="${n_margin.toFixed(2)}">%</td>
+                    <td style="text-align:center;"><input type="number" id="scenMarginB" class="excel-input" value="${b_margin.toFixed(2)}">%</td>
+                </tr>
+            </table>
+            <p style="color:#94a3b8; font-size:0.85rem;">* FCF 선택 시 '긍정/중립/부정' 이익률 입력값은 무시되고, N+1년부터 FCF 기준금액에 매출성장률이 곱해집니다.</p>
+        </div>
+
+        <!-- 4. 기타 내재가치 변수 -->
+        <h3 style="color:white; margin-top:20px;">4. 기타 내재가치 변수</h3>
         <table class="excel-table">
             <tr class="excel-header-row">
                 <th>할인율 (%)</th>
@@ -332,6 +356,14 @@ function renderDcfTab(data) {
             calculateDCF(recentYear, taxRate, netCash);
             calculateSRIM(recentYear);
         });
+
+        if (input.type === 'number') {
+            input.addEventListener('input', () => {
+                updateCagrs();
+                calculateDCF(recentYear, taxRate, netCash);
+                calculateSRIM(recentYear);
+            });
+        }
         
         // manualShares oninput 시 S-RIM sharesDisplay도 업데이트
         if (input.id === 'manualShares') {
@@ -376,22 +408,74 @@ function calculateSRIM(recentYear) {
 }
 
 function updateCagrs() {
-    let y1 = parseInt(document.getElementById('revYears1').value) || 10;
-    let y2 = parseInt(document.getElementById('revYears2').value) || 5;
-    
-    let cagr1 = calculateCAGR(globalAnnualData, '매출액', y1);
-    let cagr2 = calculateCAGR(globalAnnualData, '매출액', y2);
-    
-    document.getElementById('cagr1').textContent = cagr1 !== null ? cagr1.toFixed(2) + '%' : '-';
-    document.getElementById('cagr2').textContent = cagr2 !== null ? cagr2.toFixed(2) + '%' : '-';
-    
-    if (cagr1 !== null && cagr2 !== null) {
-        let max = Math.max(cagr1, cagr2);
-        let min = Math.min(cagr1, cagr2);
-        let avg = (cagr1 + cagr2) / 2;
-        document.getElementById('cagrMax').textContent = max.toFixed(2) + '%';
-        document.getElementById('cagrAvg').textContent = avg.toFixed(2) + '%';
-        document.getElementById('cagrMin').textContent = min.toFixed(2) + '%';
+    // 1. 최근 매출성장률 평균 계산
+    const revY1El = document.getElementById('revYears1');
+    const revY2El = document.getElementById('revYears2');
+    if (revY1El && revY2El) {
+        let y1 = parseInt(revY1El.value) || 10;
+        let y2 = parseInt(revY2El.value) || 5;
+        
+        let cagr1 = calculateCAGR(globalAnnualData, '매출액', y1);
+        let cagr2 = calculateCAGR(globalAnnualData, '매출액', y2);
+        
+        document.getElementById('cagr1').textContent = cagr1 !== null ? cagr1.toFixed(2) + '%' : '-';
+        document.getElementById('cagr2').textContent = cagr2 !== null ? cagr2.toFixed(2) + '%' : '-';
+        
+        if (cagr1 !== null && cagr2 !== null) {
+            let max = Math.max(cagr1, cagr2);
+            let min = Math.min(cagr1, cagr2);
+            let avg = (cagr1 + cagr2) / 2;
+            document.getElementById('cagrMax').textContent = max.toFixed(2) + '%';
+            document.getElementById('cagrAvg').textContent = avg.toFixed(2) + '%';
+            document.getElementById('cagrMin').textContent = min.toFixed(2) + '%';
+        } else if (cagr1 !== null) {
+            document.getElementById('cagrMax').textContent = cagr1.toFixed(2) + '%';
+            document.getElementById('cagrAvg').textContent = cagr1.toFixed(2) + '%';
+            document.getElementById('cagrMin').textContent = cagr1.toFixed(2) + '%';
+        } else if (cagr2 !== null) {
+            document.getElementById('cagrMax').textContent = cagr2.toFixed(2) + '%';
+            document.getElementById('cagrAvg').textContent = cagr2.toFixed(2) + '%';
+            document.getElementById('cagrMin').textContent = cagr2.toFixed(2) + '%';
+        } else {
+            document.getElementById('cagrMax').textContent = '-';
+            document.getElementById('cagrAvg').textContent = '-';
+            document.getElementById('cagrMin').textContent = '-';
+        }
+    }
+
+    // 2. 최근 영업이익성장률 평균 계산
+    const opY1El = document.getElementById('opYears1');
+    const opY2El = document.getElementById('opYears2');
+    if (opY1El && opY2El) {
+        let opY1 = parseInt(opY1El.value) || 10;
+        let opY2 = parseInt(opY2El.value) || 5;
+        
+        let opCagr1 = calculateCAGR(globalAnnualData, '영업이익', opY1);
+        let opCagr2 = calculateCAGR(globalAnnualData, '영업이익', opY2);
+        
+        document.getElementById('opCagr1').textContent = opCagr1 !== null ? opCagr1.toFixed(2) + '%' : '-';
+        document.getElementById('opCagr2').textContent = opCagr2 !== null ? opCagr2.toFixed(2) + '%' : '-';
+        
+        if (opCagr1 !== null && opCagr2 !== null) {
+            let max = Math.max(opCagr1, opCagr2);
+            let min = Math.min(opCagr1, opCagr2);
+            let avg = (opCagr1 + opCagr2) / 2;
+            document.getElementById('opCagrMax').textContent = max.toFixed(2) + '%';
+            document.getElementById('opCagrAvg').textContent = avg.toFixed(2) + '%';
+            document.getElementById('opCagrMin').textContent = min.toFixed(2) + '%';
+        } else if (opCagr1 !== null) {
+            document.getElementById('opCagrMax').textContent = opCagr1.toFixed(2) + '%';
+            document.getElementById('opCagrAvg').textContent = opCagr1.toFixed(2) + '%';
+            document.getElementById('opCagrMin').textContent = opCagr1.toFixed(2) + '%';
+        } else if (opCagr2 !== null) {
+            document.getElementById('opCagrMax').textContent = opCagr2.toFixed(2) + '%';
+            document.getElementById('opCagrAvg').textContent = opCagr2.toFixed(2) + '%';
+            document.getElementById('opCagrMin').textContent = opCagr2.toFixed(2) + '%';
+        } else {
+            document.getElementById('opCagrMax').textContent = '-';
+            document.getElementById('opCagrAvg').textContent = '-';
+            document.getElementById('opCagrMin').textContent = '-';
+        }
     }
 }
 
