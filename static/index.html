@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Stock Dashboard V3.0 (Dark Mode)</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=3.2">
     <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
 </head>
 <body class="dark-theme">
     <!-- 로딩 오버레이 -->
     <div id="loadingOverlay" class="loading-overlay" style="display:none;">
         <div class="spinner"></div>
-        <p>DART API에서 재무제표를 수집 및 가공 중입니다...<br><small>최대 30초 정도 소요될 수 있습니다. 잠시만 기다려주세요.</small></p>
+        <p id="loadingMessage">DART API에서 재무제표를 수집 및 가공 중입니다...<br><small>신규 기업 조회 시 약 5~15초 소요될 수 있습니다. 잠시만 기다려주세요.</small></p>
     </div>
 
     <!-- 최상단 컨트롤 바 -->
@@ -23,7 +23,10 @@
             </div>
             
             <div class="search-box">
-                <input type="text" id="corpInput" placeholder="기업명(예: 삼성전자)">
+                <div class="search-input-wrapper">
+                    <input type="text" id="corpInput" placeholder="기업명 또는 종목코드 (예: 삼성전자, 005930)" autocomplete="off">
+                    <ul id="searchSuggestList" class="suggest-dropdown"></ul>
+                </div>
                 <input type="number" id="startYear" value="2016" class="year-input">
                 <select class="q-select"><option>1Q</option></select>
                 <span class="tilde">~</span>
@@ -48,6 +51,17 @@
             </div>
         </div>
     </header>
+
+    <!-- 핵심 투자지표 요약 바 (종목 선택 시 표시) -->
+    <section id="kpiSummaryStrip" class="kpi-summary-strip" style="display:none;">
+        <div class="kpi-chip"><span class="kpi-label">현재주가</span><strong id="kpiPrice">-</strong></div>
+        <div class="kpi-chip"><span class="kpi-label">시가총액</span><strong id="kpiMktCap">-</strong></div>
+        <div class="kpi-chip"><span class="kpi-label">TTM 매출액</span><strong id="kpiRevenue">-</strong></div>
+        <div class="kpi-chip"><span class="kpi-label">TTM 영업이익(이익률)</span><strong id="kpiOpProfit">-</strong></div>
+        <div class="kpi-chip"><span class="kpi-label">PER / PBR</span><strong id="kpiPerPbr">-</strong></div>
+        <div class="kpi-chip"><span class="kpi-label">ROE / ROIC</span><strong id="kpiRoeRoic">-</strong></div>
+        <div class="kpi-chip"><span class="kpi-label">배당수익률(DPS)</span><strong id="kpiDivYield">-</strong></div>
+    </section>
 
     <!-- 하위 탭 메뉴 -->
     <nav class="sub-nav">
@@ -93,7 +107,7 @@
         </div>
     </main>
 
-    <!-- 탭 5: 밸류에이션 (차트 10,11) -->
+    <!-- 탭 5: 밸류에이션 (차트 10,11,12) -->
     <main id="tab-valuation" class="tabcontent" style="display:none;">
         <div class="chart-grid">
             <!-- 10. PER 밴드 카드 -->
@@ -187,10 +201,9 @@
         </div>
     </main>
 
-    <!-- 탭 6: 주주이익DCF (기존 구조 유지하되 다크모드 대응) -->
+    <!-- 탭 6: 주주이익DCF -->
     <main id="tab-dcf" class="tabcontent" style="display:none;">
         <div class="dcf-container">
-            <!-- DCF 영역 (Phase 3에서 자바스크립트로 주입됨) -->
             <div id="dcfFormArea">
                 <p style="color:#94a3b8; text-align:center; padding: 50px;">기업을 검색한 후 데이터를 불러오면 활성화됩니다.</p>
             </div>
@@ -227,8 +240,8 @@
         </div>
     </main>
 
-    <script src="/static/chart_render.js"></script>
-    <script src="/static/dcf_valuation.js"></script>
+    <script src="/static/chart_render.js?v=3.2"></script>
+    <script src="/static/dcf_valuation.js?v=3.2"></script>
     <script>
         function openTab(evt, tabName) {
             var i, tabcontent, tablinks;
@@ -244,7 +257,9 @@
             evt.currentTarget.className += " active";
             
             // 탭이 보이게 된 직후 ECharts 크기 재조정 이벤트를 강제 발생시켜 찌그러짐 해결
-            window.dispatchEvent(new Event('resize'));
+            setTimeout(function() {
+                window.dispatchEvent(new Event('resize'));
+            }, 30);
         }
     </script>
 

@@ -9,18 +9,18 @@ function calculateCAGR(dataArray, key, years) {
     if (actualYears <= 0 || !start || !end) return null;
     let startVal = start[key];
     let endVal = end[key];
-    if (startVal === undefined || endVal === undefined || startVal <= 0 || endVal <= 0) return null;
+    if (startVal === undefined || endVal === undefined || startVal === null || endVal === null || startVal <= 0 || endVal <= 0) return null;
     return (Math.pow(endVal / startVal, 1 / actualYears) - 1) * 100;
 }
 
 function calculateMarginStats(dataArray, years) {
-    if (dataArray.length === 0) return { max: 0, min: 0, avg: 0 };
+    if (!dataArray || dataArray.length === 0) return { max: 0, min: 0, avg: 0 };
     const startIndex = Math.max(0, dataArray.length - years);
     const slice = dataArray.slice(startIndex);
     let margins = slice.map(d => {
-        if (d['매출액'] === 0) return NaN;
+        if (!d['매출액'] || d['매출액'] === 0 || d['영업이익'] == null) return NaN;
         return (d['영업이익'] / d['매출액']) * 100;
-    }).filter(m => !isNaN(m));
+    }).filter(m => !isNaN(m) && isFinite(m));
     
     if (margins.length === 0) return { max: 0, min: 0, avg: 0 };
     let max = Math.max(...margins);
@@ -30,6 +30,7 @@ function calculateMarginStats(dataArray, years) {
 }
 
 function getFcfBase(annualData) {
+    if (!annualData || annualData.length === 0) return 0;
     if (annualData.length < 3) return (annualData[annualData.length-1].FCF || 0) / 100000000;
     const slice = annualData.slice(-5).map(d => (d.FCF || 0) / 100000000);
     if (slice.length < 3) return slice[slice.length-1];
@@ -40,38 +41,46 @@ function getFcfBase(annualData) {
 }
 
 function formatCurrencyDynamic(val) {
-    if (val === null || val === undefined) return '-';
+    if (val === null || val === undefined || isNaN(val) || !isFinite(val)) return '-';
     return Math.round(val).toLocaleString();
 }
 
+function formatPctSafe(val, digits = 1) {
+    if (val === null || val === undefined || isNaN(val) || !isFinite(val)) return '-';
+    return Number(val).toFixed(digits) + '%';
+}
+
 let globalAnnualData = [];
+let latestCagrStats = { max: 10, avg: 5, min: 2 };
 
 function renderDcfTab(data) {
     const annualData = data.annual_data;
     globalAnnualData = annualData;
     if (!annualData || annualData.length === 0) return;
+
+    const displayCorp = data.display_name || (data.stock_code ? `${data.corp_name}(${data.stock_code})` : data.corp_name);
     
-    // 연도별 요약 표 렌더링 (억원 단위)
+    // 연도별 요약 표 렌더링 (억원 단위, null/NaN 안전 방어)
     const tbody = document.querySelector('#annualTable tbody');
     tbody.innerHTML = '';
     annualData.forEach(d => {
         let tr = document.createElement('tr');
         tr.innerHTML = `
             <td>${d.Year}</td>
-            <td>${formatCurrencyDynamic(d['매출액'] / 100000000)}</td>
-            <td>${formatCurrencyDynamic(d['영업이익'] / 100000000)}</td>
-            <td>${formatCurrencyDynamic(d['이익률'])}%</td>
-            <td>${formatCurrencyDynamic(d['NOPAT'] / 100000000)}</td>
-            <td>${formatCurrencyDynamic(d['당기순이익'] / 100000000)}</td>
-            <td>${formatCurrencyDynamic(d['당기순이익률'])}%</td>
-            <td>${formatCurrencyDynamic(d['ROE'])}%</td>
-            <td>${formatCurrencyDynamic(d['ROIC'])}%</td>
-            <td>${formatCurrencyDynamic(d['배당금'] / 100000000)}</td>
-            <td>${formatCurrencyDynamic(d['영업활동현금흐름'] / 100000000)}</td>
-            <td>${formatCurrencyDynamic(d['CAPEX'] / 100000000)}</td>
-            <td>${formatCurrencyDynamic(d['FCF'] / 100000000)}</td>
-            <td>${formatCurrencyDynamic(d['감가상각비'] / 100000000)}</td>
-            <td>${(d['법인세율'] * 100).toFixed(1)}%</td>
+            <td>${d['매출액'] != null ? formatCurrencyDynamic(d['매출액'] / 100000000) : '-'}</td>
+            <td>${d['영업이익'] != null ? formatCurrencyDynamic(d['영업이익'] / 100000000) : '-'}</td>
+            <td>${formatPctSafe(d['이익률'], 1)}</td>
+            <td>${d['NOPAT'] != null ? formatCurrencyDynamic(d['NOPAT'] / 100000000) : '-'}</td>
+            <td>${d['당기순이익'] != null ? formatCurrencyDynamic(d['당기순이익'] / 100000000) : '-'}</td>
+            <td>${formatPctSafe(d['당기순이익률'], 1)}</td>
+            <td>${formatPctSafe(d['ROE'], 1)}</td>
+            <td>${formatPctSafe(d['ROIC'], 1)}</td>
+            <td>${d['배당금'] != null ? formatCurrencyDynamic(d['배당금'] / 100000000) : '-'}</td>
+            <td>${d['영업활동현금흐름'] != null ? formatCurrencyDynamic(d['영업활동현금흐름'] / 100000000) : '-'}</td>
+            <td>${d['CAPEX'] != null ? formatCurrencyDynamic(d['CAPEX'] / 100000000) : '-'}</td>
+            <td>${d['FCF'] != null ? formatCurrencyDynamic(d['FCF'] / 100000000) : '-'}</td>
+            <td>${d['감가상각비'] != null ? formatCurrencyDynamic(d['감가상각비'] / 100000000) : '-'}</td>
+            <td>${d['법인세율'] != null ? (d['법인세율'] * 100).toFixed(1) + '%' : '-'}</td>
         `;
         tbody.appendChild(tr);
     });
@@ -85,7 +94,7 @@ function renderDcfTab(data) {
     let marginStats = calculateMarginStats(annualData, 5);
     
     let currentPrice = recentYear['주가'] || 0;
-    let shares = recentYear['유통주식수'] || 0;
+    let shares = recentYear['현재주식수'] || recentYear['유통주식수'] || 0;
     let netCash = ((recentYear['현금및현금성자산'] || 0) + (recentYear['단기금융자산'] || 0)) - (recentYear['단기금융부채'] || 0);
     let taxRate = recentYear['법인세율'] || 0.22;
 
@@ -94,6 +103,10 @@ function renderDcfTab(data) {
     let b_margin = marginStats.min > 0 ? marginStats.min : 5;
     
     let html = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <h2 style="color:white; margin:0;">주주이익 DCF 가치평가 [${displayCorp}]</h2>
+            <button type="button" id="applyHistCagrBtn" class="btn-primary" style="font-size:0.85rem; padding:6px 14px;">과거 매출 CAGR → 시나리오 성장률 자동반영</button>
+        </div>
         <div style="display:flex; justify-content:space-between; gap:20px;">
             <!-- 1. 최근 매출성장률 평균 (기간 수기입력) -->
             <div style="flex:1;">
@@ -187,7 +200,7 @@ function renderDcfTab(data) {
         <div id="dcfScenarioTables"></div>
 
         <!-- 6. 최종 기댓값 및 결과 표 -->
-        <h3 style="color:white;">6. 내재가치 결과</h3>
+        <h3 style="color:white;">6. 내재가치 결과 [${displayCorp}]</h3>
         <table class="excel-table" id="finalResultTable">
             <tr class="excel-header-row">
                 <th>시나리오</th>
@@ -248,7 +261,7 @@ function renderDcfTab(data) {
         <!-- S-RIM 가치평가 시작 -->
         <!-- ============================================== -->
         <hr style="border-color:#334155; margin:40px 0;">
-        <h2 style="color:white; text-align:center;">S-RIM (사경인 회계사 잔여이익모델)</h2>
+        <h2 style="color:white; text-align:center;">S-RIM (사경인 회계사 잔여이익모델) [${displayCorp}]</h2>
         
         <div style="display:flex; justify-content:space-between; gap:20px; margin-top:20px;">
             <!-- 과거 ROE 추이 -->
@@ -262,13 +275,13 @@ function renderDcfTab(data) {
                         <th style="background-color:#3b82f6;">3년 평균</th>
                     </tr>
                     <tr>
-                        <td style="text-align:center;">${(annualData.length >= 3 && annualData[annualData.length-3]['ROE']) ? annualData[annualData.length-3]['ROE'].toFixed(2) : 0}%</td>
-                        <td style="text-align:center;">${(annualData.length >= 2 && annualData[annualData.length-2]['ROE']) ? annualData[annualData.length-2]['ROE'].toFixed(2) : 0}%</td>
-                        <td style="text-align:center;">${(annualData.length >= 1 && annualData[annualData.length-1]['ROE']) ? annualData[annualData.length-1]['ROE'].toFixed(2) : 0}%</td>
+                        <td style="text-align:center;">${(annualData.length >= 3 && annualData[annualData.length-3]['ROE'] != null) ? annualData[annualData.length-3]['ROE'].toFixed(2) : 0}%</td>
+                        <td style="text-align:center;">${(annualData.length >= 2 && annualData[annualData.length-2]['ROE'] != null) ? annualData[annualData.length-2]['ROE'].toFixed(2) : 0}%</td>
+                        <td style="text-align:center;">${(annualData.length >= 1 && annualData[annualData.length-1]['ROE'] != null) ? annualData[annualData.length-1]['ROE'].toFixed(2) : 0}%</td>
                         <td style="text-align:center; font-weight:bold;">${(() => {
                             let count = 0, sum = 0;
                             for (let i=1; i<=3; i++) {
-                                if (annualData.length >= i && annualData[annualData.length-i]['ROE']) {
+                                if (annualData.length >= i && annualData[annualData.length-i]['ROE'] != null) {
                                     sum += annualData[annualData.length-i]['ROE'];
                                     count++;
                                 }
@@ -288,7 +301,7 @@ function renderDcfTab(data) {
                         <td><input type="number" id="srimExpectedRoe" class="excel-input" value="${(() => {
                             let count = 0, sum = 0;
                             for (let i=1; i<=3; i++) {
-                                if (annualData.length >= i && annualData[annualData.length-i]['ROE']) {
+                                if (annualData.length >= i && annualData[annualData.length-i]['ROE'] != null) {
                                     sum += annualData[annualData.length-i]['ROE'];
                                     count++;
                                 }
@@ -298,7 +311,7 @@ function renderDcfTab(data) {
                     </tr>
                     <tr>
                         <td style="background-color:#1e293b;">요구수익률 (%)</td>
-                        <td style="font-weight:bold; padding-left:10px;">10.0% (고정)</td>
+                        <td><input type="number" id="srimRequiredReturn" class="excel-input" value="10.0" step="0.1" style="width:80px; text-align:center;"> %</td>
                     </tr>
                     <tr>
                         <td style="background-color:#1e293b;">지배주주자본 (억원)</td>
@@ -370,9 +383,27 @@ function renderDcfTab(data) {
             input.addEventListener('input', () => {
                 let v = input.value.replace(/[^0-9]/g, '');
                 document.getElementById('srimSharesDisplay').textContent = v ? Number(v).toLocaleString() : '0';
+                calculateDCF(recentYear, taxRate, netCash);
+                calculateSRIM(recentYear);
             });
         }
     });
+
+    const applyCagrBtn = document.getElementById('applyHistCagrBtn');
+    if (applyCagrBtn) {
+        applyCagrBtn.addEventListener('click', () => {
+            updateCagrs();
+            for (let i = 1; i <= 5; i++) {
+                let gp = document.getElementById(`g_P_${i}`);
+                let gn = document.getElementById(`g_N_${i}`);
+                let gb = document.getElementById(`g_B_${i}`);
+                if (gp) gp.value = latestCagrStats.max.toFixed(1);
+                if (gn) gn.value = latestCagrStats.avg.toFixed(1);
+                if (gb) gb.value = latestCagrStats.min.toFixed(1);
+            }
+            calculateDCF(recentYear, taxRate, netCash);
+        });
+    }
     
     updateCagrs();
     calculateDCF(recentYear, taxRate, netCash);
@@ -380,12 +411,13 @@ function renderDcfTab(data) {
 }
 
 function calculateSRIM(recentYear) {
-    const expectedRoe = parseFloat(document.getElementById('srimExpectedRoe').value) / 100;
-    const requiredReturn = 0.10; // 10% 고정
+    const expectedRoe = (parseFloat(document.getElementById('srimExpectedRoe')?.value) || 0) / 100;
+    const reqRetEl = document.getElementById('srimRequiredReturn');
+    const requiredReturn = Math.max(0.01, (parseFloat(reqRetEl ? reqRetEl.value : 10.0) || 10.0) / 100);
     const equityBase = (recentYear['자본총계'] || 0) / 100000000;
     
     const sharesRaw = document.getElementById('manualShares').value.replace(/,/g, '');
-    const shares = parseFloat(sharesRaw) || recentYear['유통주식수'];
+    const shares = parseFloat(sharesRaw) || recentYear['현재주식수'] || recentYear['유통주식수'] || 1;
     
     // w = 1.0, 0.9, 0.8
     const scenarios = [
@@ -395,11 +427,8 @@ function calculateSRIM(recentYear) {
     ];
     
     scenarios.forEach(scen => {
-        // 기업가치 = 자본 + 자본 * (ROE - COE) * w / (1 + COE - w)
         let residualIncome = equityBase * (expectedRoe - requiredReturn);
         let intrinsicValue = equityBase + (residualIncome * scen.w) / (1 + requiredReturn - scen.w);
-        
-        // 적정주가 = (적정가치(억원) * 100,000,000) / 유통주식수
         let targetPrice = (intrinsicValue * 100000000) / shares;
         
         document.getElementById(`srimVal_${scen.id}`).textContent = formatCurrencyDynamic(intrinsicValue);
@@ -425,14 +454,17 @@ function updateCagrs() {
             let max = Math.max(cagr1, cagr2);
             let min = Math.min(cagr1, cagr2);
             let avg = (cagr1 + cagr2) / 2;
+            latestCagrStats = { max, avg, min };
             document.getElementById('cagrMax').textContent = max.toFixed(2) + '%';
             document.getElementById('cagrAvg').textContent = avg.toFixed(2) + '%';
             document.getElementById('cagrMin').textContent = min.toFixed(2) + '%';
         } else if (cagr1 !== null) {
+            latestCagrStats = { max: cagr1, avg: cagr1, min: cagr1 };
             document.getElementById('cagrMax').textContent = cagr1.toFixed(2) + '%';
             document.getElementById('cagrAvg').textContent = cagr1.toFixed(2) + '%';
             document.getElementById('cagrMin').textContent = cagr1.toFixed(2) + '%';
         } else if (cagr2 !== null) {
+            latestCagrStats = { max: cagr2, avg: cagr2, min: cagr2 };
             document.getElementById('cagrMax').textContent = cagr2.toFixed(2) + '%';
             document.getElementById('cagrAvg').textContent = cagr2.toFixed(2) + '%';
             document.getElementById('cagrMin').textContent = cagr2.toFixed(2) + '%';
@@ -526,22 +558,23 @@ function renderScenarioTables(baseYear) {
 }
 
 function calculateDCF(recentYear, taxRate, netCash) {
-    const dr = parseFloat(document.getElementById('discountRate').value) / 100;
-    const tg = parseFloat(document.getElementById('terminalGrowth').value) / 100;
+    const dr = (parseFloat(document.getElementById('discountRate').value) || 10) / 100;
+    const tg = (parseFloat(document.getElementById('terminalGrowth').value) || 2) / 100;
+    const spread = Math.max(0.005, dr - tg);
     const sharesRaw = document.getElementById('manualShares').value.replace(/,/g, '');
-    const shares = parseFloat(sharesRaw) || recentYear['유통주식수'];
+    const shares = parseFloat(sharesRaw) || recentYear['현재주식수'] || recentYear['유통주식수'] || 1;
     const currentPrice = parseFloat(document.getElementById('currentPrice').value.replace(/,/g, '')) || 0;
     
     const baseMetric = document.querySelector('input[name="baseMetric"]:checked').value; // 'NOPAT' or 'FCF'
     
-    const marginP = parseFloat(document.getElementById('scenMarginP').value) / 100;
-    const marginN = parseFloat(document.getElementById('scenMarginN').value) / 100;
-    const marginB = parseFloat(document.getElementById('scenMarginB').value) / 100;
+    const marginP = (parseFloat(document.getElementById('scenMarginP').value) || 0) / 100;
+    const marginN = (parseFloat(document.getElementById('scenMarginN').value) || 0) / 100;
+    const marginB = (parseFloat(document.getElementById('scenMarginB').value) || 0) / 100;
     
     const scenarios = [
-        { id: 'P', margin: marginP, prob: parseFloat(document.getElementById('probP').value) / 100 },
-        { id: 'N', margin: marginN, prob: parseFloat(document.getElementById('probN').value) / 100 },
-        { id: 'B', margin: marginB, prob: parseFloat(document.getElementById('probB').value) / 100 }
+        { id: 'P', margin: marginP, prob: (parseFloat(document.getElementById('probP').value) || 0) / 100 },
+        { id: 'N', margin: marginN, prob: (parseFloat(document.getElementById('probN').value) || 0) / 100 },
+        { id: 'B', margin: marginB, prob: (parseFloat(document.getElementById('probB').value) || 0) / 100 }
     ];
     
     let totalExpectedValue = 0;
@@ -569,7 +602,7 @@ function calculateDCF(recentYear, taxRate, netCash) {
         let currentCf = baseMetric === 'FCF' ? fcfBase : 0;
         
         for (let i = 1; i <= 5; i++) {
-            let g = parseFloat(document.getElementById(`g_${scen.id}_${i}`).value) / 100;
+            let g = (parseFloat(document.getElementById(`g_${scen.id}_${i}`).value) || 0) / 100;
             currentRev = currentRev * (1 + g);
             
             let cf = 0;
@@ -593,7 +626,7 @@ function calculateDCF(recentYear, taxRate, netCash) {
         }
         
         // 영구가치 (Terminal Value) 계산 (N+5년 CF 기준)
-        let tv = (cf5 * (1 + tg)) / (dr - tg);
+        let tv = (cf5 * (1 + tg)) / spread;
         let df_tv = Math.pow((1 + dr), 5);
         let pv_tv = tv / df_tv;
         
@@ -602,7 +635,7 @@ function calculateDCF(recentYear, taxRate, netCash) {
         document.getElementById(`dn_tv_${scen.id}`).textContent = formatCurrencyDynamic(pv_tv);
         
         let totalVal = sumPV + pv_tv;
-        document.getElementById(`tv_sum_${scen.id}`).textContent = formatCurrencyDynamic(tv + (cf5*5)); // 단순 표시
+        document.getElementById(`tv_sum_${scen.id}`).textContent = formatCurrencyDynamic(tv + (cf5*5));
         document.getElementById(`total_${scen.id}`).textContent = formatCurrencyDynamic(totalVal);
         
         // 내재가치 요약 표 업데이트
@@ -623,23 +656,28 @@ function calculateDCF(recentYear, taxRate, netCash) {
     document.getElementById('cardTargetPrice').textContent = formatCurrencyDynamic(targetPrice) + ' 원';
     document.getElementById('cardCurrentPrice').textContent = formatCurrencyDynamic(currentPrice) + ' 원';
     
-    let expectedReturn = Math.pow((targetPrice / currentPrice), 1/5) - 1;
     let retDom = document.getElementById('cardExpectedReturn');
-    retDom.textContent = (expectedReturn * 100).toFixed(2) + '%';
-    if (expectedReturn < 0) {
-        retDom.style.color = '#ef4444';
+    if (currentPrice > 0 && targetPrice > 0) {
+        let expectedReturn = Math.pow((targetPrice / currentPrice), 1/5) - 1;
+        retDom.textContent = (expectedReturn * 100).toFixed(2) + '%';
+        retDom.style.color = expectedReturn < 0 ? '#ef4444' : '#10b981';
     } else {
-        retDom.style.color = '#10b981';
+        retDom.textContent = '-';
+        retDom.style.color = '#94a3b8';
     }
 }
 
 // 엑셀 다운로드 (DCF 기대수익률 시뮬레이션 테이블 묶음)
 function exportDcfToCSV() {
     let csv = [];
+    const corpLabel = window.currentDisplayCorpName || '기업';
+    csv.push(`"종목: ${corpLabel}"`);
+    csv.push("");
+
     // 시나리오 3개 테이블
     ['P', 'N', 'B'].forEach(id => {
         let table = document.getElementById(`table_${id}`);
-        if(table) {
+        if (table) {
             let title = table.previousElementSibling.innerText;
             csv.push(title);
             for (let i = 0; i < table.rows.length; i++) {
@@ -657,8 +695,8 @@ function exportDcfToCSV() {
 
     // 6. 내재가치 결과 테이블
     let resTable = document.getElementById("finalResultTable");
-    if(resTable) {
-        csv.push("6. 내재가치 결과");
+    if (resTable) {
+        csv.push(`6. 내재가치 결과 [${corpLabel}]`);
         for (let i = 0; i < resTable.rows.length; i++) {
             let row = [], cols = resTable.rows[i].querySelectorAll("td, th");
             for (let j = 0; j < cols.length; j++) {
@@ -675,7 +713,7 @@ function exportDcfToCSV() {
     let link = document.createElement("a");
     let url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    link.setAttribute("download", "DCF_시나리오_분석결과.csv");
+    link.setAttribute("download", `${corpLabel}_DCF_시나리오_분석결과.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();

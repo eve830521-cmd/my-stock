@@ -646,3 +646,110 @@ input:checked + .slider:before {
     font-weight: 600;
     white-space: nowrap;
 }
+
+/* 종목 검색 자동완성 및 기업명(종목코드) 표시 개선 */
+.dropdown-content {
+    min-width: 240px;
+    max-height: 400px;
+}
+
+.dropdown-content li {
+    white-space: nowrap;
+    font-size: 0.92rem;
+}
+
+.search-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.search-box input[type="text"] {
+    width: 240px;
+    font-size: 0.92rem;
+}
+
+.suggest-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    left: -12px;
+    width: 300px;
+    max-height: 320px;
+    overflow-y: auto;
+    background-color: #1e293b;
+    border: 1px solid #475569;
+    border-radius: 8px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
+    z-index: 2000;
+}
+
+.suggest-dropdown li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 9px 14px;
+    color: #e2e8f0;
+    font-size: 0.9rem;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(51, 65, 85, 0.6);
+    transition: background-color 0.15s;
+}
+
+.suggest-dropdown li:last-child {
+    border-bottom: none;
+}
+
+.suggest-dropdown li:hover,
+.suggest-dropdown li.active {
+    background-color: #334155;
+}
+
+.suggest-dropdown .suggest-name {
+    font-weight: 600;
+    color: #f8fafc;
+}
+
+.suggest-dropdown .suggest-code {
+    font-size: 0.8rem;
+    color: #38bdf8;
+    background-color: rgba(56, 189, 248, 0.12);
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-family: monospace;
+}
+
+/* 핵심 투자지표 요약 바 (KPI Strip) */
+.kpi-summary-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 10px 30px;
+    background: linear-gradient(90deg, #0f172a 0%, #172554 50%, #0f172a 100%);
+    border-bottom: 1px solid #334155;
+    align-items: center;
+}
+
+.kpi-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background-color: rgba(30, 41, 59, 0.85);
+    border: 1px solid #334155;
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 0.84rem;
+}
+
+.kpi-chip .kpi-label {
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+.kpi-chip strong {
+    color: #f8fafc;
+    font-weight: 700;
+}

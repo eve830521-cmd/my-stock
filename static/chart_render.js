@@ -1,4 +1,5 @@
 let globalChartData = null;
+let currentDisplayCorpName = '';
 let charts = [];
 
 const chartExplanations = {
@@ -90,6 +91,11 @@ document.addEventListener('click', function(e) {
 });
 
 const round2 = (val) => (val != null && typeof val === 'number' && !isNaN(val)) ? Math.round(val * 100) / 100 : null;
+
+function withCorpTag(title) {
+    if (!currentDisplayCorpName) return title;
+    return `${title} [${currentDisplayCorpName}]`;
+}
 
 let currentMode = 'TTM'; // 'TTM' or 'Annual'
 let syncBandPeriods = true;
@@ -355,7 +361,7 @@ function applyDySimulation() {
 
         chart.setOption({
             title: {
-                text: `12. 주가배당수익률 (Dividend Yield) 밴드 ${bandLabel} [시뮬레이션: ${selectedDySimYear}년 DPS ${Math.round(simDPS).toLocaleString()}원 반영, 최신 수익률: ${round2(latestSimDY)}%] (현재 주가: ${currentPriceFormatted}원)`,
+                text: withCorpTag(`12. 주가배당수익률 (Dividend Yield) 밴드 ${bandLabel} [시뮬레이션: ${selectedDySimYear}년 DPS ${Math.round(simDPS).toLocaleString()}원 반영, 최신 수익률: ${round2(latestSimDY)}%] (현재 주가: ${currentPriceFormatted}원)`),
                 left: 'center',
                 top: 0,
                 triggerEvent: true
@@ -402,7 +408,7 @@ function restoreOriginalDyBand() {
 
         chart.setOption({
             title: {
-                text: `12. 주가배당수익률 (Dividend Yield) 밴드 ${bandLabel} (현재 주가: ${currentPriceFormatted}원)`,
+                text: withCorpTag(`12. 주가배당수익률 (Dividend Yield) 밴드 ${bandLabel} (현재 주가: ${currentPriceFormatted}원)`),
                 left: 'center',
                 top: 0,
                 triggerEvent: true
@@ -424,6 +430,158 @@ function restoreOriginalDyBand() {
 
 window.toggleDySimulation = toggleDySimulation;
 window.onDySimYearChange = onDySimYearChange;
+
+// --- 검색창 실시간 자동완성(기업명/종목코드) ---
+let suggestDebounceTimer = null;
+let suggestActiveIdx = -1;
+
+function setupSearchAutocomplete() {
+    const input = document.getElementById('corpInput');
+    const suggestList = document.getElementById('searchSuggestList');
+    if (!input || !suggestList) return;
+
+    const closeSuggest = () => {
+        suggestList.style.display = 'none';
+        suggestList.innerHTML = '';
+        suggestActiveIdx = -1;
+    };
+
+    input.addEventListener('input', () => {
+        const q = input.value.trim();
+        if (suggestDebounceTimer) clearTimeout(suggestDebounceTimer);
+        if (!q) {
+            closeSuggest();
+            return;
+        }
+        suggestDebounceTimer = setTimeout(async () => {
+            try {
+                const res = await fetch(`/suggest?q=${encodeURIComponent(q)}&limit=10`);
+                if (!res.ok) return;
+                const data = await res.json();
+                const items = data.items || [];
+                if (items.length === 0) {
+                    closeSuggest();
+                    return;
+                }
+                suggestList.innerHTML = '';
+                suggestActiveIdx = -1;
+                items.forEach((item, idx) => {
+                    const li = document.createElement('li');
+                    li.dataset.displayName = item.display_name;
+                    li.innerHTML = `<span class="suggest-name">${item.corp_name}</span><span class="suggest-code">${item.stock_code}</span>`;
+                    li.addEventListener('mousedown', (e) => {
+                        e.preventDefault();
+                        input.value = item.display_name;
+                        closeSuggest();
+                        const startYear = document.getElementById('startYear').value;
+                        const endYear = document.getElementById('endYear').value;
+                        searchData(item.display_name, startYear, endYear, false);
+                    });
+                    suggestList.appendChild(li);
+                });
+                suggestList.style.display = 'block';
+            } catch (err) {
+                console.error('Autocomplete error:', err);
+            }
+        }, 150);
+    });
+
+    input.addEventListener('keydown', (e) => {
+        const items = suggestList.querySelectorAll('li');
+        if (suggestList.style.display === 'block' && items.length > 0) {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                suggestActiveIdx = (suggestActiveIdx + 1) % items.length;
+                items.forEach((el, i) => el.classList.toggle('active', i === suggestActiveIdx));
+                items[suggestActiveIdx].scrollIntoView({ block: 'nearest' });
+                return;
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                suggestActiveIdx = (suggestActiveIdx - 1 + items.length) % items.length;
+                items.forEach((el, i) => el.classList.toggle('active', i === suggestActiveIdx));
+                items[suggestActiveIdx].scrollIntoView({ block: 'nearest' });
+                return;
+            } else if (e.key === 'Enter' && suggestActiveIdx >= 0) {
+                e.preventDefault();
+                const chosen = items[suggestActiveIdx].dataset.displayName;
+                if (chosen) {
+                    input.value = chosen;
+                    closeSuggest();
+                    const startYear = document.getElementById('startYear').value;
+                    const endYear = document.getElementById('endYear').value;
+                    searchData(chosen, startYear, endYear, false);
+                    return;
+                }
+            } else if (e.key === 'Escape') {
+                closeSuggest();
+                return;
+            }
+        }
+        if (e.key === 'Enter') {
+            closeSuggest();
+            document.getElementById('searchBtn').click();
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!input.contains(e.target) && !suggestList.contains(e.target)) {
+            closeSuggest();
+        }
+    });
+}
+
+function formatKpiMoney(val) {
+    if (val == null || isNaN(val) || val === 0) return '-';
+    const abs = Math.abs(val);
+    if (abs >= 1e12) return (val / 1e12).toFixed(2) + '조원';
+    if (abs >= 1e8) return Math.round(val / 1e8).toLocaleString() + '억원';
+    return Math.round(val).toLocaleString() + '원';
+}
+
+function updateKpiSummaryStrip(data) {
+    const strip = document.getElementById('kpiSummaryStrip');
+    if (!strip) return;
+    if (!data || !data.ttm_data || data.ttm_data.length === 0) {
+        strip.style.display = 'none';
+        return;
+    }
+    const latest = data.ttm_data[data.ttm_data.length - 1];
+    const price = latest['주가'];
+    const mktCap = latest['시가총액'];
+    const rev = latest['매출액'];
+    const op = latest['영업이익'];
+    const opMargin = latest['이익률'];
+    const per = latest['PER'];
+    const pbr = latest['PBR'];
+    const roe = latest['ROE'];
+    const roic = latest['ROIC'];
+
+    // 최신 배당수익률 및 DPS (TTM 또는 가장 최근 연간 사업보고서 기준)
+    let dps = latest['DPS'] || latest['수정DPS'];
+    let divYield = latest['배당수익률'];
+    if ((!dps || dps <= 0) && data.annual_data && data.annual_data.length > 0) {
+        for (let i = data.annual_data.length - 1; i >= 0; i--) {
+            const ad = data.annual_data[i];
+            if ((ad['DPS'] && ad['DPS'] > 0) || (ad['수정DPS'] && ad['수정DPS'] > 0)) {
+                dps = ad['DPS'] || ad['수정DPS'];
+                divYield = price > 0 ? (dps / price) * 100 : null;
+                break;
+            }
+        }
+    }
+
+    document.getElementById('kpiPrice').textContent = price ? `${Math.round(price).toLocaleString()}원` : '-';
+    document.getElementById('kpiMktCap').textContent = formatKpiMoney(mktCap);
+    document.getElementById('kpiRevenue').textContent = formatKpiMoney(rev);
+    document.getElementById('kpiOpProfit').textContent = `${formatKpiMoney(op)} (${opMargin != null ? round2(opMargin) + '%' : '-'})`;
+    document.getElementById('kpiPerPbr').textContent = `${per != null ? round2(per) + '배' : 'N/A'} / ${pbr != null ? round2(pbr) + '배' : '-'}`;
+    document.getElementById('kpiRoeRoic').textContent = `${roe != null ? round2(roe) + '%' : '-'} / ${roic != null ? round2(roic) + '%' : '-'}`;
+    document.getElementById('kpiDivYield').textContent = (divYield != null && dps > 0)
+        ? `${round2(divYield)}% (${Math.round(dps).toLocaleString()}원)`
+        : '무배당/미공시';
+
+    strip.style.display = 'flex';
+}
 
 document.addEventListener("DOMContentLoaded", () => {
     // 13개 차트 초기화 (다크모드 테마 적용)
@@ -464,23 +622,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // 윈도우 리사이즈 시 차트 리사이즈
     window.addEventListener('resize', () => {
-        charts.forEach(c => c.resize());
+        charts.forEach(c => c && c.resize());
     });
 
     document.getElementById('searchBtn').addEventListener('click', () => {
-        const corpName = document.getElementById('corpInput').value;
+        const corpName = document.getElementById('corpInput').value.trim();
         const startYear = document.getElementById('startYear').value;
         const endYear = document.getElementById('endYear').value;
         
-        if (!corpName) return alert("기업명을 입력하세요.");
-        searchData(corpName, startYear, endYear);
+        if (!corpName) return alert("기업명 또는 종목코드를 입력하세요.");
+        // '조회 및 최신화' 버튼 클릭 시에는 최신 데이터 강제 동기화(refresh=true)
+        searchData(corpName, startYear, endYear, true);
     });
 
-    // 엔터키 검색
-    document.getElementById('corpInput').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') document.getElementById('searchBtn').click();
-    });
-
+    setupSearchAutocomplete();
     loadCompanyList();
 });
 
@@ -491,12 +646,15 @@ async function loadCompanyList() {
         const ul = document.getElementById('companyList');
         if (!ul) return;
         ul.innerHTML = '';
-        data.companies.forEach(company => {
+        (data.companies || []).forEach(company => {
             let li = document.createElement('li');
-            li.textContent = company;
+            li.textContent = company; // "기업명(종목코드)" 형식 표시
             li.onclick = () => {
                 document.getElementById('corpInput').value = company;
-                document.getElementById('searchBtn').click();
+                const startYear = document.getElementById('startYear').value;
+                const endYear = document.getElementById('endYear').value;
+                // 리스트에서 클릭 시 캐시된 엑셀 즉시 로드(refresh=false)
+                searchData(company, startYear, endYear, false);
             };
             ul.appendChild(li);
         });
@@ -505,12 +663,16 @@ async function loadCompanyList() {
     }
 }
 
-async function searchData(corpName, startYear, endYear) {
+async function searchData(corpName, startYear, endYear, forceRefresh = false) {
     const overlay = document.getElementById('loadingOverlay');
+    const suggestList = document.getElementById('searchSuggestList');
+    if (suggestList) suggestList.style.display = 'none';
+
     try {
         overlay.style.display = 'flex'; // 로딩 켜기
         
-        const res = await fetch(`/search?corp_name=${encodeURIComponent(corpName)}&start_year=${startYear}&end_year=${endYear}`);
+        const url = `/search?corp_name=${encodeURIComponent(corpName)}&start_year=${startYear}&end_year=${endYear}&refresh=${forceRefresh}`;
+        const res = await fetch(url);
         if (!res.ok) {
             const err = await res.json();
             throw new Error(err.detail || "데이터를 불러오지 못했습니다.");
@@ -518,8 +680,12 @@ async function searchData(corpName, startYear, endYear) {
         
         const data = await res.json();
         globalChartData = data;
+        currentDisplayCorpName = data.display_name || (data.stock_code ? `${data.corp_name}(${data.stock_code})` : data.corp_name);
+        window.currentDisplayCorpName = currentDisplayCorpName;
         
-                document.getElementById('currentCorpName').textContent = data.corp_name;
+        // 상단 헤더 및 검색창 모두 "기업명(종목코드)"로 통일 표시
+        document.getElementById('currentCorpName').textContent = currentDisplayCorpName;
+        document.getElementById('corpInput').value = currentDisplayCorpName;
         
         let badge = document.getElementById('latestReportBadge');
         if (badge && data.ttm_data && data.ttm_data.length > 0) {
@@ -530,6 +696,10 @@ async function searchData(corpName, startYear, endYear) {
             badge.textContent = `최신: ${lastData.Year}년 ${qText}`;
             badge.style.display = 'inline-block';
         }
+
+        // 종목 전환 시 밴드 기간 및 배당 시뮬레이션 상태 초기화
+        currentBandMonths = { 9: 'all', 10: 'all', 11: 'all' };
+        updateKpiSummaryStrip(data);
         
         renderCharts(currentMode === 'TTM' ? data.ttm_data : data.annual_data);
         populateDySimYears();
@@ -553,6 +723,7 @@ function renderCharts(viewData) {
     let xAxisData = viewData.map(d => d.Year + (currentMode === 'TTM' ? '.' + d.Quarter : ''));
     
     const yAxisFormatter = (value) => {
+        if (value == null || isNaN(value)) return '-';
         if (Math.abs(value) >= 1000000000000) {
             return (value / 1000000000000).toFixed(1) + '조';
         } else if (Math.abs(value) >= 100000000) {
@@ -563,20 +734,31 @@ function renderCharts(viewData) {
         return value.toLocaleString();
     };
 
+    const pctFormatter = (val) => (val != null && !isNaN(val)) ? `${round2(val)}%` : '-';
+    const mulFormatter = (val) => (val != null && !isNaN(val)) ? `${round2(val)}배` : '-';
+
+    // [요청사항 3 완벽 해결]
+    // 기존 axisPointer: { type: 'cross' }는 다중 Y축(특히 PER/PBR/배당 밴드의 숨김 제3축 yAxisIndex: 2 환산주가 축)의
+    // 마우스 커서 Y좌표값을 우측 Y축 위에 '푸른색 바탕의 흰색 숫자' 라벨로 강제 표시하여 실제 주가 축이나 툴팁 숫자와 전혀 맞지 않는 현상을 유발했음.
+    // axisPointer를 세로 기준선(type: 'line')으로 설정하고 불필요한 축 좌표 플로팅 배지(label.show: false)를 제거하여 가독성과 수치 정합성을 확보함.
     const commonOptions = {
         backgroundColor: 'transparent',
         tooltip: { 
             trigger: 'axis', 
-            axisPointer: { type: 'cross' },
+            axisPointer: {
+                type: 'line',
+                lineStyle: { color: '#94a3b8', width: 1, type: 'dashed' },
+                label: { show: false }
+            },
             valueFormatter: (value) => {
                 if (value == null || isNaN(value)) return '-';
-                if (Math.abs(value) >= 1000000000000) return (value / 1000000000000).toFixed(1) + '조';
-                if (Math.abs(value) >= 100000000) return (value / 100000000).toFixed(0) + '억';
-                if (Math.abs(value) >= 10000) return (value / 10000).toFixed(0) + '만';
-                return value.toLocaleString();
+                if (Math.abs(value) >= 1000000000000) return (value / 1000000000000).toFixed(2) + '조원';
+                if (Math.abs(value) >= 100000000) return Math.round(value / 100000000).toLocaleString() + '억원';
+                if (Math.abs(value) >= 10000) return Math.round(value / 10000).toLocaleString() + '만원';
+                return Number(value).toLocaleString();
             }
         },
-        legend: { top: '5%' },
+        legend: { top: '6%' },
         grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true },
         dataZoom: [
             { type: 'inside', start: 0, end: 100 },
@@ -597,13 +779,11 @@ function renderCharts(viewData) {
         }
 
         charts[chartIndex].setOption({
-            title: { text: title, left: 'center', top: 0, triggerEvent: true },
+            title: { text: withCorpTag(title), left: 'center', top: 0, triggerEvent: true },
             ...commonOptions,
             ...optionOverrides
         }, true);
     };
-
-    const round2 = (val) => (val != null && typeof val === 'number' && !isNaN(val)) ? Math.round(val * 100) / 100 : null;
 
     // 1. 실적 차트 (매출액, 영업이익, 당기순이익)
     applyOption(0, '1. 실적 추이', {
@@ -624,22 +804,22 @@ function renderCharts(viewData) {
         xAxis: { type: 'category', data: xAxisData },
         yAxis: [
             { type: 'value', name: '매출액(원)', axisLabel: { formatter: yAxisFormatter }, scale: true },
-            { type: 'value', name: '이익률(%)', scale: true, splitLine: { show: false } }
+            { type: 'value', name: '이익률(%)', axisLabel: { formatter: '{value}%' }, scale: true, splitLine: { show: false } }
         ],
         series: [
             { name: '매출액', type: 'bar', data: viewData.map(d => d['매출액']) },
-            { name: '매출총이익률', type: 'line', yAxisIndex: 1, data: viewData.map(d => round2(d['매출총이익률'])) },
-            { name: '영업이익률', type: 'line', yAxisIndex: 1, data: viewData.map(d => round2(d['이익률'])) }
+            { name: '매출총이익률', type: 'line', yAxisIndex: 1, data: viewData.map(d => round2(d['매출총이익률'])), tooltip: { valueFormatter: pctFormatter } },
+            { name: '영업이익률', type: 'line', yAxisIndex: 1, data: viewData.map(d => round2(d['이익률'])), tooltip: { valueFormatter: pctFormatter } }
         ]
     });
 
     // 3. 매출총이익률 & 판관비율
     applyOption(2, '3. 이익 구조 (매출총이익률 & 판관비율)', {
         xAxis: { type: 'category', data: xAxisData },
-        yAxis: { type: 'value', name: '비율(%)', scale: true },
+        yAxis: { type: 'value', name: '비율(%)', axisLabel: { formatter: '{value}%' }, scale: true },
         series: [
-            { name: '매출총이익률', type: 'line', data: viewData.map(d => round2(d['매출총이익률'])) },
-            { name: '판관비율', type: 'line', data: viewData.map(d => round2(d['판관비율'])) }
+            { name: '매출총이익률', type: 'line', data: viewData.map(d => round2(d['매출총이익률'])), tooltip: { valueFormatter: pctFormatter } },
+            { name: '판관비율', type: 'line', data: viewData.map(d => round2(d['판관비율'])), tooltip: { valueFormatter: pctFormatter } }
         ]
     });
 
@@ -656,9 +836,9 @@ function renderCharts(viewData) {
     // 5. 이자보상배율
     applyOption(4, '5. 이자보상배율 (안전성)', {
         xAxis: { type: 'category', data: xAxisData },
-        yAxis: { type: 'value', name: '배율', scale: true },
+        yAxis: { type: 'value', name: '배율(배)', scale: true },
         series: [
-            { name: '이자보상배율', type: 'line', data: viewData.map(d => round2(d['이자보상배율'])), areaStyle: {} }
+            { name: '이자보상배율', type: 'line', data: viewData.map(d => round2(d['이자보상배율'])), areaStyle: {}, tooltip: { valueFormatter: mulFormatter } }
         ]
     });
 
@@ -680,7 +860,7 @@ function renderCharts(viewData) {
                 type: 'bar',
                 data: annualList.map(d => d['배당금'] || 0),
                 itemStyle: { color: '#5470c6' },
-                tooltip: { valueFormatter: (val) => val != null ? val.toLocaleString() + '원' : '-' }
+                tooltip: { valueFormatter: (val) => val != null ? yAxisFormatter(val) + ` (${Number(val).toLocaleString()}원)` : '-' }
             },
             {
                 name: '배당성향',
@@ -689,7 +869,7 @@ function renderCharts(viewData) {
                 data: annualList.map(d => (d['당기순이익'] > 0 && d['배당금'] > 0) ? round2((d['배당금'] / d['당기순이익']) * 100) : (d['배당성향'] != null ? round2(d['배당성향']) : null)),
                 lineStyle: { color: '#fac858', width: 3 },
                 itemStyle: { color: '#fac858' },
-                tooltip: { valueFormatter: (val) => val != null ? val + '%' : '-' }
+                tooltip: { valueFormatter: pctFormatter }
             }
         ]
     });
@@ -719,13 +899,13 @@ function renderCharts(viewData) {
     applyOption(7, '8. 자본 효율성 (ROE, ROIC, PBR)', {
         xAxis: { type: 'category', data: xAxisData },
         yAxis: [
-            { type: 'value', name: '수익성(%)', scale: true },
+            { type: 'value', name: '수익성(%)', axisLabel: { formatter: '{value}%' }, scale: true },
             { type: 'value', name: 'PBR(배)', splitLine: { show: false }, scale: true }
         ],
         series: [
-            { name: 'ROE', type: 'line', data: viewData.map(d => round2(d['ROE'])) },
-            { name: 'ROIC', type: 'line', data: viewData.map(d => round2(d['ROIC'])) },
-            { name: 'PBR', type: 'line', yAxisIndex: 1, data: viewData.map(d => round2(d['PBR'])) }
+            { name: 'ROE', type: 'line', data: viewData.map(d => round2(d['ROE'])), tooltip: { valueFormatter: pctFormatter } },
+            { name: 'ROIC', type: 'line', data: viewData.map(d => round2(d['ROIC'])), tooltip: { valueFormatter: pctFormatter } },
+            { name: 'PBR', type: 'line', yAxisIndex: 1, data: viewData.map(d => round2(d['PBR'])), tooltip: { valueFormatter: mulFormatter } }
         ]
     });
 
@@ -734,41 +914,53 @@ function renderCharts(viewData) {
         xAxis: { type: 'category', data: xAxisData },
         yAxis: [
             { type: 'value', name: '금액(원)', axisLabel: { formatter: yAxisFormatter }, scale: true },
-            { type: 'value', name: '비율(%)', scale: true, splitLine: { show: false } }
+            { type: 'value', name: '비율(%)', axisLabel: { formatter: '{value}%' }, scale: true, splitLine: { show: false } }
         ],
         series: [
             { name: 'CAPEX', type: 'bar', data: viewData.map(d => d['CAPEX']) },
-            { name: 'CAPEX/OCF 비율', type: 'line', yAxisIndex: 1, data: viewData.map(d => round2(d['CAPEX_OCF_비율'])) }
+            { name: 'CAPEX/OCF 비율', type: 'line', yAxisIndex: 1, data: viewData.map(d => round2(d['CAPEX_OCF_비율'])), tooltip: { valueFormatter: pctFormatter } }
         ]
     });
 
-    // 10. PER 차트 (밴드 데이터 연동)
+    // 10~12. 밸류에이션 밴드 차트 (PER / PBR / 배당수익률)
     if (globalChartData && globalChartData.band_data && globalChartData.band_data.length > 0) {
         let useAnnualBand = (currentMode === 'Annual' && globalChartData.annual_band_data && globalChartData.annual_band_data.length > 0);
         let bandData = useAnnualBand ? globalChartData.annual_band_data : globalChartData.band_data;
         window.currentBandData = bandData;
 
-        // 툴바 표시
+        // 툴바 표시 및 타이틀에 기업명(종목코드) 반영
         let perToolbar = document.getElementById('perBandToolbar');
         let pbrToolbar = document.getElementById('pbrBandToolbar');
         let dyToolbar = document.getElementById('dyBandToolbar');
-        if (perToolbar) perToolbar.style.display = 'flex';
-        if (pbrToolbar) pbrToolbar.style.display = 'flex';
-        if (dyToolbar) dyToolbar.style.display = 'flex';
+        if (perToolbar) {
+            perToolbar.style.display = 'flex';
+            const t = perToolbar.querySelector('.band-toolbar-title');
+            if (t) t.textContent = withCorpTag('10. 주가수익비율 (PER) 밴드');
+        }
+        if (pbrToolbar) {
+            pbrToolbar.style.display = 'flex';
+            const t = pbrToolbar.querySelector('.band-toolbar-title');
+            if (t) t.textContent = withCorpTag('11. 주가순자산비율 (PBR) 밴드');
+        }
+        if (dyToolbar) {
+            dyToolbar.style.display = 'flex';
+            const t = dyToolbar.querySelector('.band-toolbar-title');
+            if (t) t.textContent = withCorpTag('12. 주가배당수익률 (Dividend Yield) 밴드');
+        }
         
         let bandXAxis = bandData.map(d => d.date || d.Year);
-        let currentPrice = viewData.length > 0 && viewData[0]['주가'] ? viewData[0]['주가'].toLocaleString() : '-';
+        let latestPriceVal = (bandData.length > 0 && bandData[bandData.length - 1]['price'])
+            ? bandData[bandData.length - 1]['price']
+            : (viewData.length > 0 && viewData[viewData.length - 1]['주가'] ? viewData[viewData.length - 1]['주가'] : null);
+        let currentPrice = latestPriceVal ? Math.round(latestPriceVal).toLocaleString() : '-';
         let bandLabel = useAnnualBand ? '(연간/연말종가)' : '(TTM/주말종가)';
         
         const priceFormatter = (value) => {
             if (value == null || isNaN(value)) return '-';
-            if (value >= 1000000) return parseFloat((value / 1000000).toFixed(2)) + '백만원';
-            if (value >= 10000) return parseFloat((value / 10000).toFixed(2)) + '만원';
-            return value.toLocaleString() + '원';
+            return Math.round(Number(value)).toLocaleString() + '원';
         };
         
-        // 10. PER 차트 (밴드 데이터 연동, 우측 주가축 왜곡 방지를 위해 환산주가는 숨김 3축에 격리)
-        // 극단적 이상치(ISC 4,526배, 두산테스나 634배 등 EPS 0원 수렴) 발생 시에만 선택적 스마트 캡 적용 (정상 기업 왜곡 0%)
+        // 10. PER 차트 (우측 주가축 왜곡 방지를 위해 환산주가는 숨김 3축에 격리 + axisPointer 비활성화)
         let pMax = (bandData.length > 0 && bandData[0]['PER_Max']) ? bandData[0]['PER_Max'] : 0;
         let p90 = (bandData.length > 0 && bandData[0]['PER_Plus1SD']) ? bandData[0]['PER_Plus1SD'] : 0;
         let perYAxisOpt = { type: 'value', name: 'PER(배)', scale: true };
@@ -780,16 +972,16 @@ function renderCharts(viewData) {
             xAxis: { type: 'category', data: bandXAxis },
             yAxis: [
                 perYAxisOpt,
-                { type: 'value', name: '주가(원)', scale: true, splitLine: { show: false }, axisLabel: { formatter: yAxisFormatter } },
-                { type: 'value', show: false }
+                { type: 'value', name: '주가(원)', scale: true, splitLine: { show: false }, axisLabel: { formatter: (v) => v != null ? Number(v).toLocaleString() + '원' : '' } },
+                { type: 'value', show: false, axisPointer: { show: false } }
             ],
             series: [
-                { name: '역사적 최고점', type: 'line', data: bandData.map(d => round2(d['PER_Max'])), lineStyle: { type: 'dashed', color: '#ff4d4f' }, symbol: 'none' },
-                { name: '상위 10%', type: 'line', data: bandData.map(d => round2(d['PER_Plus1SD'])), lineStyle: { type: 'dashed', color: '#ffa39e' }, symbol: 'none' },
-                { name: '10년 중앙값', type: 'line', data: bandData.map(d => round2(d['PER_Average'])), lineStyle: { color: '#e6a23c', width: 4 }, symbol: 'none' },
-                { name: '하위 10%', type: 'line', data: bandData.map(d => round2(d['PER_Minus1SD'])), lineStyle: { type: 'dashed', color: '#91caff' }, symbol: 'none' },
-                { name: '역사적 최저점', type: 'line', data: bandData.map(d => round2(d['PER_Min'])), lineStyle: { type: 'dashed', color: '#1890ff' }, symbol: 'none' },
-                { name: 'PER', type: 'line', data: bandData.map(d => round2(d['PER'])), lineStyle: { color: '#ffffff', width: 2 }, itemStyle: { color: '#ffffff' }, areaStyle: { opacity: 0.1 } },
+                { name: '역사적 최고점', type: 'line', data: bandData.map(d => round2(d['PER_Max'])), lineStyle: { type: 'dashed', color: '#ff4d4f' }, symbol: 'none', tooltip: { valueFormatter: mulFormatter } },
+                { name: '상위 10%', type: 'line', data: bandData.map(d => round2(d['PER_Plus1SD'])), lineStyle: { type: 'dashed', color: '#ffa39e' }, symbol: 'none', tooltip: { valueFormatter: mulFormatter } },
+                { name: '10년 중앙값', type: 'line', data: bandData.map(d => round2(d['PER_Average'])), lineStyle: { color: '#e6a23c', width: 4 }, symbol: 'none', tooltip: { valueFormatter: mulFormatter } },
+                { name: '하위 10%', type: 'line', data: bandData.map(d => round2(d['PER_Minus1SD'])), lineStyle: { type: 'dashed', color: '#91caff' }, symbol: 'none', tooltip: { valueFormatter: mulFormatter } },
+                { name: '역사적 최저점', type: 'line', data: bandData.map(d => round2(d['PER_Min'])), lineStyle: { type: 'dashed', color: '#1890ff' }, symbol: 'none', tooltip: { valueFormatter: mulFormatter } },
+                { name: 'PER', type: 'line', data: bandData.map(d => round2(d['PER'])), lineStyle: { color: '#ffffff', width: 2 }, itemStyle: { color: '#ffffff' }, areaStyle: { opacity: 0.1 }, symbol: 'none', tooltip: { valueFormatter: mulFormatter } },
                 { 
                     name: '주가', 
                     type: 'line', 
@@ -824,22 +1016,21 @@ function renderCharts(viewData) {
             ]
         });
 
-        // 11. PBR 차트 (밴드 데이터 연동)
+        // 11. PBR 차트 (상위/하위 10% 환산주가를 숨김 3축 yAxisIndex: 2로 격리하여 우측 주가축 왜곡 방지)
         applyOption(10, `11. 주가순자산비율 (PBR) 밴드 ${bandLabel} (현재 주가: ${currentPrice}원)`, {
             xAxis: { type: 'category', data: bandXAxis },
             yAxis: [
                 { type: 'value', name: 'PBR(배)', scale: true },
-                { type: 'value', name: '주가(원)', scale: true, splitLine: { show: false }, axisLabel: { formatter: yAxisFormatter } },
-                { type: 'value', show: false }
+                { type: 'value', name: '주가(원)', scale: true, splitLine: { show: false }, axisLabel: { formatter: (v) => v != null ? Number(v).toLocaleString() + '원' : '' } },
+                { type: 'value', show: false, axisPointer: { show: false } }
             ],
             series: [
-                { name: '역사적 최고점', type: 'line', data: bandData.map(d => round2(d['PBR_Max'])), lineStyle: { type: 'dashed', color: '#ff4d4f' }, symbol: 'none' },
-                { name: '상위 10%', type: 'line', data: bandData.map(d => round2(d['PBR_Plus1SD'])), lineStyle: { type: 'dashed', color: '#ffa39e' }, symbol: 'none' },
-                { name: '10년 중앙값', type: 'line', data: bandData.map(d => round2(d['PBR_Average'])), lineStyle: { color: '#e6a23c', width: 4 }, symbol: 'none' },
-                { name: '하위 10%', type: 'line', data: bandData.map(d => round2(d['PBR_Minus1SD'])), lineStyle: { type: 'dashed', color: '#91caff' }, symbol: 'none' },
-                { name: '역사적 최저점', type: 'line', data: bandData.map(d => round2(d['PBR_Min'])), lineStyle: { type: 'dashed', color: '#1890ff' }, symbol: 'none' },
-                { name: 'PBR', type: 'line', data: bandData.map(d => round2(d['PBR'])), lineStyle: { color: '#ffffff', width: 2 }, itemStyle: { color: '#ffffff' }, areaStyle: { opacity: 0.1 } },
-
+                { name: '역사적 최고점', type: 'line', data: bandData.map(d => round2(d['PBR_Max'])), lineStyle: { type: 'dashed', color: '#ff4d4f' }, symbol: 'none', tooltip: { valueFormatter: mulFormatter } },
+                { name: '상위 10%', type: 'line', data: bandData.map(d => round2(d['PBR_Plus1SD'])), lineStyle: { type: 'dashed', color: '#ffa39e' }, symbol: 'none', tooltip: { valueFormatter: mulFormatter } },
+                { name: '10년 중앙값', type: 'line', data: bandData.map(d => round2(d['PBR_Average'])), lineStyle: { color: '#e6a23c', width: 4 }, symbol: 'none', tooltip: { valueFormatter: mulFormatter } },
+                { name: '하위 10%', type: 'line', data: bandData.map(d => round2(d['PBR_Minus1SD'])), lineStyle: { type: 'dashed', color: '#91caff' }, symbol: 'none', tooltip: { valueFormatter: mulFormatter } },
+                { name: '역사적 최저점', type: 'line', data: bandData.map(d => round2(d['PBR_Min'])), lineStyle: { type: 'dashed', color: '#1890ff' }, symbol: 'none', tooltip: { valueFormatter: mulFormatter } },
+                { name: 'PBR', type: 'line', data: bandData.map(d => round2(d['PBR'])), lineStyle: { color: '#ffffff', width: 2 }, itemStyle: { color: '#ffffff' }, areaStyle: { opacity: 0.1 }, symbol: 'none', tooltip: { valueFormatter: mulFormatter } },
                 { 
                     name: '주가', 
                     type: 'line', 
@@ -852,20 +1043,22 @@ function renderCharts(viewData) {
                 { 
                     name: '상위 10% 환산주가', 
                     type: 'line', 
-                    yAxisIndex: 1, 
+                    yAxisIndex: 2, 
                     data: bandData.map(d => d['BPS'] ? Math.round(d['PBR_Plus1SD'] * d['BPS']) : null), 
                     lineStyle: { opacity: 0 }, 
                     itemStyle: { color: '#ffa39e' }, 
+                    symbol: 'none',
                     showSymbol: false, 
                     tooltip: { valueFormatter: priceFormatter } 
                 },
                 { 
                     name: '하위 10% 환산주가', 
                     type: 'line', 
-                    yAxisIndex: 1, 
+                    yAxisIndex: 2, 
                     data: bandData.map(d => d['BPS'] ? Math.round(d['PBR_Minus1SD'] * d['BPS']) : null), 
                     lineStyle: { opacity: 0 }, 
                     itemStyle: { color: '#91caff' }, 
+                    symbol: 'none',
                     showSymbol: false, 
                     tooltip: { valueFormatter: priceFormatter } 
                 },
@@ -874,16 +1067,20 @@ function renderCharts(viewData) {
                     type: 'line', 
                     yAxisIndex: 2,
                     data: bandData.map(d => round2(d['Current_ROE'])), 
+                    symbol: 'none',
                     showSymbol: false, 
-                    lineStyle: { opacity: 0 } 
+                    lineStyle: { opacity: 0 },
+                    tooltip: { valueFormatter: pctFormatter }
                 },
                 { 
                     name: '10년 평균 ROE', 
                     type: 'line', 
                     yAxisIndex: 2,
                     data: bandData.map(d => round2(d['Median_ROE'])), 
+                    symbol: 'none',
                     showSymbol: false, 
-                    lineStyle: { opacity: 0 } 
+                    lineStyle: { opacity: 0 },
+                    tooltip: { valueFormatter: pctFormatter }
                 }
             ]
         });
@@ -892,17 +1089,17 @@ function renderCharts(viewData) {
         applyOption(11, `12. 주가배당수익률 (Dividend Yield) 밴드 ${bandLabel} (현재 주가: ${currentPrice}원)`, {
             xAxis: { type: 'category', data: bandXAxis },
             yAxis: [
-                { type: 'value', name: '배당수익률(%)', scale: true },
-                { type: 'value', name: '주가(원)', scale: true, splitLine: { show: false }, axisLabel: { formatter: yAxisFormatter } },
-                { type: 'value', show: false }
+                { type: 'value', name: '배당수익률(%)', axisLabel: { formatter: '{value}%' }, scale: true },
+                { type: 'value', name: '주가(원)', scale: true, splitLine: { show: false }, axisLabel: { formatter: (v) => v != null ? Number(v).toLocaleString() + '원' : '' } },
+                { type: 'value', show: false, axisPointer: { show: false } }
             ],
             series: [
-                { name: '역사적 최고점', type: 'line', data: bandData.map(d => round2(d['DY_Max'])), lineStyle: { type: 'dashed', color: '#ff4d4f' }, symbol: 'none' },
-                { name: '상위 10%', type: 'line', data: bandData.map(d => round2(d['DY_Plus1SD'])), lineStyle: { type: 'dashed', color: '#ffa39e' }, symbol: 'none' },
-                { name: '10년 중앙값', type: 'line', data: bandData.map(d => round2(d['DY_Average'])), lineStyle: { color: '#e6a23c', width: 4 }, symbol: 'none' },
-                { name: '하위 10%', type: 'line', data: bandData.map(d => round2(d['DY_Minus1SD'])), lineStyle: { type: 'dashed', color: '#91caff' }, symbol: 'none' },
-                { name: '역사적 최저점', type: 'line', data: bandData.map(d => round2(d['DY_Min'])), lineStyle: { type: 'dashed', color: '#1890ff' }, symbol: 'none' },
-                { name: '배당수익률', type: 'line', data: bandData.map(d => round2(d['배당수익률'])), lineStyle: { color: '#ffffff', width: 2 }, itemStyle: { color: '#ffffff' }, areaStyle: { opacity: 0.1 }, symbol: 'none' },
+                { name: '역사적 최고점', type: 'line', data: bandData.map(d => round2(d['DY_Max'])), lineStyle: { type: 'dashed', color: '#ff4d4f' }, symbol: 'none', tooltip: { valueFormatter: pctFormatter } },
+                { name: '상위 10%', type: 'line', data: bandData.map(d => round2(d['DY_Plus1SD'])), lineStyle: { type: 'dashed', color: '#ffa39e' }, symbol: 'none', tooltip: { valueFormatter: pctFormatter } },
+                { name: '10년 중앙값', type: 'line', data: bandData.map(d => round2(d['DY_Average'])), lineStyle: { color: '#e6a23c', width: 4 }, symbol: 'none', tooltip: { valueFormatter: pctFormatter } },
+                { name: '하위 10%', type: 'line', data: bandData.map(d => round2(d['DY_Minus1SD'])), lineStyle: { type: 'dashed', color: '#91caff' }, symbol: 'none', tooltip: { valueFormatter: pctFormatter } },
+                { name: '역사적 최저점', type: 'line', data: bandData.map(d => round2(d['DY_Min'])), lineStyle: { type: 'dashed', color: '#1890ff' }, symbol: 'none', tooltip: { valueFormatter: pctFormatter } },
+                { name: '배당수익률', type: 'line', data: bandData.map(d => round2(d['배당수익률'])), lineStyle: { color: '#ffffff', width: 2 }, itemStyle: { color: '#ffffff' }, areaStyle: { opacity: 0.1 }, symbol: 'none', tooltip: { valueFormatter: pctFormatter } },
                 { 
                     name: '주가', 
                     type: 'line', 
@@ -941,38 +1138,38 @@ function renderCharts(viewData) {
         const updateBands = (chartIndex, key, titlePrefix) => {
             let chart = charts[chartIndex];
             if (!chart) return;
-            let bandData = window.currentBandData || bandData;
-            if (!bandData || bandData.length === 0) return;
+            let activeBandData = window.currentBandData;
+            if (!activeBandData || activeBandData.length === 0) return;
             setTimeout(() => {
                 let opt = chart.getOption();
                 let startIdx = 0;
-                let endIdx = bandData.length - 1;
+                let endIdx = activeBandData.length - 1;
                 
                 if (opt.dataZoom && opt.dataZoom[0]) {
                     let startPercent = opt.dataZoom[0].start;
                     let endPercent = opt.dataZoom[0].end;
-                    startIdx = Math.floor(bandData.length * startPercent / 100);
-                    endIdx = Math.ceil(bandData.length * endPercent / 100) - 1;
-                    if(startIdx < 0) startIdx = 0;
-                    if(endIdx >= bandData.length) endIdx = bandData.length - 1;
+                    startIdx = Math.floor(activeBandData.length * startPercent / 100);
+                    endIdx = Math.ceil(activeBandData.length * endPercent / 100) - 1;
+                    if (startIdx < 0) startIdx = 0;
+                    if (endIdx >= activeBandData.length) endIdx = activeBandData.length - 1;
                 }
                 
-                let sliced = bandData.slice(startIdx, endIdx + 1);
+                let sliced = activeBandData.slice(startIdx, endIdx + 1);
                 let allVals = sliced.map(d => d[key]).filter(v => v > 0);
                 let vals = allVals.slice();
 
                 // UI 기간 배지 및 입력란 동기화
-                let firstDate = new Date(bandData[0].date || `${bandData[0].Year}-01-01`);
-                let lastDate = new Date(bandData[bandData.length - 1].date || `${bandData[bandData.length - 1].Year}-12-31`);
+                let firstDate = new Date(activeBandData[0].date || `${activeBandData[0].Year}-01-01`);
+                let lastDate = new Date(activeBandData[activeBandData.length - 1].date || `${activeBandData[activeBandData.length - 1].Year}-12-31`);
                 let totalMonths = Math.max(1, Math.round((lastDate - firstDate) / (1000 * 60 * 60 * 24 * 30.4375)));
 
-                let sDate = new Date(bandData[startIdx].date || `${bandData[startIdx].Year}-01-01`);
-                let eDate = new Date(bandData[endIdx].date || `${bandData[endIdx].Year}-12-31`);
+                let sDate = new Date(activeBandData[startIdx].date || `${activeBandData[startIdx].Year}-01-01`);
+                let eDate = new Date(activeBandData[endIdx].date || `${activeBandData[endIdx].Year}-12-31`);
                 let curMonths = Math.max(1, Math.round((eDate - sDate) / (1000 * 60 * 60 * 24 * 30.4375)));
-                let isFull = (startIdx === 0 && endIdx >= bandData.length - 1);
+                let isFull = (startIdx === 0 && endIdx >= activeBandData.length - 1);
                 
-                let sStr = bandData[startIdx].date || bandData[startIdx].Year;
-                let eStr = bandData[endIdx].date || bandData[endIdx].Year;
+                let sStr = activeBandData[startIdx].date || activeBandData[startIdx].Year;
+                let eStr = activeBandData[endIdx].date || activeBandData[endIdx].Year;
                 
                 updateBandPeriodUI(chartIndex, isFull ? totalMonths : curMonths, sStr, eStr, isFull);
                 currentBandMonths[chartIndex] = isFull ? 'all' : curMonths;
@@ -1001,24 +1198,24 @@ function renderCharts(viewData) {
                     let simTitleSuffix = (isDySimActive && key === '배당수익률' && selectedDySimYear) ? ` [시뮬레이션: ${selectedDySimYear}년 DPS 반영]` : '';
 
                     chart.setOption({
-                        title: { text: `${titlePrefix} ${bandLabel}${simTitleSuffix} (현재 주가: ${currentPrice}원, 확대구간 중앙값: ${round2(median)}${unit})`, left: 'center', top: 0, triggerEvent: true },
+                        title: { text: withCorpTag(`${titlePrefix} ${bandLabel}${simTitleSuffix} (현재 주가: ${currentPrice}원, 확대구간 중앙값: ${round2(median)}${unit})`), left: 'center', top: 0, triggerEvent: true },
                         ...(yAxisUpdate.length > 0 ? { yAxis: yAxisUpdate } : {}),
                         series: [
-                            { data: bandData.map(() => round2(max)) },
-                            { data: bandData.map(() => round2(p90)) },
-                            { data: bandData.map(() => round2(median)) },
-                            { data: bandData.map(() => round2(p10)) },
-                            { data: bandData.map(() => round2(min)) },
-                            (key === '배당수익률' ? { data: bandData.map(d => round2(d['배당수익률'])) } : {}), // 배당수익률은 시뮬레이션 및 원복 최신 반영
+                            { data: activeBandData.map(() => round2(max)) },
+                            { data: activeBandData.map(() => round2(p90)) },
+                            { data: activeBandData.map(() => round2(median)) },
+                            { data: activeBandData.map(() => round2(p10)) },
+                            { data: activeBandData.map(() => round2(min)) },
+                            (key === '배당수익률' ? { data: activeBandData.map(d => round2(d['배당수익률'])) } : {}),
                             {}, // 주가
-                            { data: bandData.map(targetP90) },
-                            { data: bandData.map(targetP10) }
+                            { data: activeBandData.map(targetP90) },
+                            { data: activeBandData.map(targetP10) }
                         ]
                     });
                 } else {
                     let simTitleSuffix = (isDySimActive && key === '배당수익률' && selectedDySimYear) ? ` [시뮬레이션: ${selectedDySimYear}년 DPS 반영]` : '';
                     chart.setOption({
-                        title: { text: `${titlePrefix} ${bandLabel}${simTitleSuffix} (현재 주가: ${currentPrice}원, 확대구간 중앙값: -)`, left: 'center', top: 0, triggerEvent: true }
+                        title: { text: withCorpTag(`${titlePrefix} ${bandLabel}${simTitleSuffix} (현재 주가: ${currentPrice}원, 확대구간 중앙값: -)`), left: 'center', top: 0, triggerEvent: true }
                     });
                 }
 
@@ -1078,22 +1275,27 @@ function renderCharts(viewData) {
             xAxis: { type: 'category', data: xAxisData },
             yAxis: { type: 'value', name: 'PER(배)', scale: true },
             series: [
-                { name: 'PER', type: 'line', data: viewData.map(d => round2(d['PER'])), areaStyle: { opacity: 0.2 } }
+                { name: 'PER', type: 'line', data: viewData.map(d => round2(d['PER'])), areaStyle: { opacity: 0.2 }, tooltip: { valueFormatter: mulFormatter } }
             ]
         });
         applyOption(10, '11. 주가순자산비율 (PBR) 밴드', {
             xAxis: { type: 'category', data: xAxisData },
             yAxis: { type: 'value', name: 'PBR(배)', scale: true },
             series: [
-                { name: 'PBR', type: 'line', data: viewData.map(d => round2(d['PBR'])), areaStyle: { opacity: 0.2 } }
+                { name: 'PBR', type: 'line', data: viewData.map(d => round2(d['PBR'])), areaStyle: { opacity: 0.2 }, tooltip: { valueFormatter: mulFormatter } }
             ]
         });
         applyOption(11, '12. 주가배당수익률 (Dividend Yield) 밴드', {
             xAxis: { type: 'category', data: xAxisData },
             yAxis: { type: 'value', name: '배당수익률(%)', scale: true },
             series: [
-                { name: '배당수익률', type: 'line', data: viewData.map(d => round2(d['배당수익률'])), areaStyle: { opacity: 0.2 } }
+                { name: '배당수익률', type: 'line', data: viewData.map(d => round2(d['배당수익률'])), areaStyle: { opacity: 0.2 }, tooltip: { valueFormatter: pctFormatter } }
             ]
         });
     }
+
+    // 차트 렌더링 직후 크기 동기화
+    setTimeout(() => {
+        charts.forEach(c => c && c.resize());
+    }, 30);
 }
