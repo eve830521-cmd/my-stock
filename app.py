@@ -1,6 +1,7 @@
 import os
 import io
 import shutil
+from datetime import datetime
 from urllib.parse import quote
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -126,12 +127,15 @@ def search_company(
         use_existing_excel = False
         if not refresh and os.path.exists(cached_excel_path):
             try:
-                xl = pd.ExcelFile(cached_excel_path)
-                required_sheets = {"Sheet3(TTM)", "Sheet4(Annual)", "Sheet5(Band)", "Sheet6(AnnualBand)"}
-                if required_sheets.issubset(set(xl.sheet_names)):
-                    df_check = xl.parse("Sheet3(TTM)")
-                    if not df_check.empty and "DPS" in df_check.columns:
-                        use_existing_excel = True
+                mtime = datetime.fromtimestamp(os.path.getmtime(cached_excel_path))
+                # 오늘 이미 생성/최신화된 엑셀 파일인 경우에만 기존 파일 즉시 로드 (당일 주가 및 최신 지표 보장)
+                if mtime.date() == datetime.today().date():
+                    xl = pd.ExcelFile(cached_excel_path)
+                    required_sheets = {"Sheet3(TTM)", "Sheet4(Annual)", "Sheet5(Band)", "Sheet6(AnnualBand)"}
+                    if required_sheets.issubset(set(xl.sheet_names)):
+                        df_check = xl.parse("Sheet3(TTM)")
+                        if not df_check.empty and "DPS" in df_check.columns:
+                            use_existing_excel = True
             except Exception:
                 use_existing_excel = False
 

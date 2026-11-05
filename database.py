@@ -270,7 +270,7 @@ def get_historical_prices(stock_code, years=10, force_refresh=False):
         if df.empty:
             return []
 
-        # 매주 금요일(주말일) 종가 기준으로 리샘플링
+        # 매주 금요일(주말일) 종가 기준으로 리샘플링하되, 마지막 포인트는 실제 최신 거래일 날짜와 종가를 그대로 반영
         df_weekly = df.resample('W-FRI').last()
         df_weekly = df_weekly.dropna(subset=['Close'])
 
@@ -280,6 +280,12 @@ def get_historical_prices(stock_code, years=10, force_refresh=False):
                 'date': index.strftime('%Y-%m-%d'),
                 'price': float(row_data['Close'])
             })
+
+        if prices and not df.empty:
+            latest_actual_date = df.index[-1].strftime('%Y-%m-%d')
+            latest_actual_close = float(df.iloc[-1]['Close'])
+            prices[-1]['date'] = latest_actual_date
+            prices[-1]['price'] = latest_actual_close
 
         with _db_lock:
             conn = _get_conn()
